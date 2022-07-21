@@ -12,14 +12,10 @@ function get_LOB_details(ticker)
     return bid_price, ask_price, spread 
 end
 
-function PowerLaw(min_volume_size, PL_shape)
-    return min_volume_size / (rand() ^ (1 / PL_shape))
-end
-
 function MM_run(ticker, market_open, market_close, parameters, server_info)
     # unpack parameters
-    username,password,PL_scale,min_volume_size,scale_depth,orderid,pareto_threshold  = parameters
-    host_ip_address, port = server_info
+    volume_location,volume_scale,volume_shape,scale_depth,orderid,pareto_threshold  = parameters
+    host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
     # activation rule
@@ -54,8 +50,9 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 gamma_scale = exp(OB_imbalance / scale_depth)
                 liquidity_demand = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
                 limit_price = bid_price + spread + liquidity_demand
-                PL_shape = 1 - (OB_imbalance/PL_scale) # Shape for power law
-                limit_size = PowerLaw(min_volume_size, PL_shape)
+                vol_disparity = 1 - (OB_imbalance)
+                equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
+                limit_size = rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))
                 # println("SELL: price = $(limit_price), size = $(limit_size).")
                 order = Client.provideLiquidity(ticker,orderid,"SELL_ORDER",limit_price,limit_size,id)
             else
@@ -64,8 +61,9 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 gamma_scale = exp(-OB_imbalance / scale_depth)
                 liquidity_demand = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
                 limit_price = ask_price - spread - liquidity_demand
-                PL_shape = 1 + (OB_imbalance/PL_scale) # Shape for power law
-                limit_size = PowerLaw(min_volume_size, PL_shape)
+                vol_disparity = 1 + (OB_imbalance)
+                equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
+                limit_size = rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))
                 # println("BUY: price = $(limit_price), size = $(limit_size).")
                 order = Client.provideLiquidity(ticker,orderid,"BUY_ORDER",limit_price,limit_size,id)
             end
