@@ -52,8 +52,8 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 # place ask side (SELL) limit order
                 gamma_shape = spread
                 gamma_scale = exp(OB_imbalance / scale_depth)
-                liquidity_draw = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
-                limit_price = bid_price + 1.0 + liquidity_draw
+                liquidity_demand = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
+                limit_price = bid_price + spread + liquidity_demand
                 PL_shape = 1 - (OB_imbalance/PL_scale) # Shape for power law
                 limit_size = PowerLaw(min_volume_size, PL_shape)
                 # println("SELL: price = $(limit_price), size = $(limit_size).")
@@ -62,8 +62,8 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 # place bid side (BUY) limit order
                 gamma_shape = spread
                 gamma_scale = exp(-OB_imbalance / scale_depth)
-                liquidity_draw = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
-                limit_price = ask_price - 1.0 - liquidity_draw
+                liquidity_demand = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
+                limit_price = ask_price - spread - liquidity_demand
                 PL_shape = 1 + (OB_imbalance/PL_scale) # Shape for power law
                 limit_size = PowerLaw(min_volume_size, PL_shape)
                 # println("BUY: price = $(limit_price), size = $(limit_size).")
