@@ -2,10 +2,10 @@ using Exchange, Dates
 
 ## Example use case
 parameters = (
+    min_liq = 0.001, # minimum limit order price deviation from spread
     volume_location = 50, # location for order size distribution
     volume_scale = 10, # scale for order size distribution
     volume_shape = 1, # shape for order size distribution
-    scale_depth = 2.5, # amplifies the effects caused by OB_imbalance
     orderid = 1234, # arbitrary (for now)
     pareto_threshold = 0.12 # 0.12 -> activate ~ 80% of the time, decrease to slow down
 )
