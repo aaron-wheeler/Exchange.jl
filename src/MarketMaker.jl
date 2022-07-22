@@ -48,7 +48,7 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 # place ask side (SELL) limit order
                 gamma_shape = spread
                 gamma_scale = exp(OB_imbalance / scale_depth)
-                liquidity_demand = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
+                liquidity_demand = rand(Gamma(gamma_shape, gamma_scale))
                 limit_price = bid_price + spread + liquidity_demand
                 vol_disparity = 1 - (OB_imbalance)
                 equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
@@ -59,7 +59,7 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 # place bid side (BUY) limit order
                 gamma_shape = spread
                 gamma_scale = exp(-OB_imbalance / scale_depth)
-                liquidity_demand = trunc(rand(Gamma(gamma_shape, gamma_scale)), digits=2)
+                liquidity_demand = rand(Gamma(gamma_shape, gamma_scale))
                 limit_price = ask_price - spread - liquidity_demand
                 vol_disparity = 1 + (OB_imbalance)
                 equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term

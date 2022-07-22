@@ -7,7 +7,7 @@ parameters = (
     volume_shape = 1, # shape for order size distribution
     scale_depth = 2.5, # amplifies the effects caused by OB_imbalance
     orderid = 1234, # arbitrary (for now)
-    pareto_threshold = 0.12 # activate ~ 80% of the time
+    pareto_threshold = 0.12 # 0.12 -> activate ~ 80% of the time, decrease to slow down
 )
 
 server_info = (
@@ -18,8 +18,8 @@ server_info = (
 )
 
 ticker = 1
-market_open = Dates.now() + Dates.Second(20) # DateTime(2022,7,19,13,19,41,036)
-market_close = market_open + Dates.Second(5)
+market_open = Dates.now() + Dates.Second(10) # DateTime(2022,7,19,13,19,41,036)
+market_close = market_open + Dates.Second(45)
 
 MM_run(ticker, market_open, market_close, parameters, server_info)
 
