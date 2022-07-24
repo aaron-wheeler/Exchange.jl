@@ -50,7 +50,7 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 liquidity_mean = max(min_liq, demand_scale + OB_imbalance*(spread))
                 liquidity_shape = 1.01 - OB_imbalance*(1.0)
                 liquidity_demand = rand(InverseGaussian(liquidity_mean, liquidity_shape))
-                limit_price = bid_price + spread + liquidity_demand
+                limit_price = bid_price + log(0.99 + spread) + liquidity_demand
                 vol_disparity = 1 - (OB_imbalance)
                 equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
                 limit_size = abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil)))
@@ -62,7 +62,7 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 liquidity_mean = max(min_liq, demand_scale - OB_imbalance*(spread))
                 liquidity_shape = 1.01 + OB_imbalance*(1.0)
                 liquidity_demand = rand(InverseGaussian(liquidity_mean, liquidity_shape))
-                limit_price = ask_price - spread - liquidity_demand
+                limit_price = ask_price - log(0.99 + spread) - liquidity_demand
                 vol_disparity = 1 + (OB_imbalance)
                 equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
                 limit_size = abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil)))
