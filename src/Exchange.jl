@@ -2,7 +2,9 @@ module Exchange
 
 using Brokerage, Distributions, Dates
 
-include("MarketMaker.jl")
+const ORDER_ID_COUNTER = Ref{Int64}(0)
+
+include("SimpleMarketMaker.jl")
 
 export MM_run
 

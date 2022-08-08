@@ -2,11 +2,12 @@ using Exchange, Dates
 
 ## Example use case
 parameters = (
-    min_liq = 0.001, # minimum limit order price deviation from spread
+    min_side_volume = 500, # minimum volume always present on either side of OB
+    tick_size = 0.01, # minimum price tick for underlying asset
     volume_location = 50, # location for order size distribution
     volume_scale = 10, # scale for order size distribution
     volume_shape = 1, # shape for order size distribution
-    orderid = 1234, # arbitrary (for now)
+    # orderid = 1234, # arbitrary (for now)
     pareto_threshold = 0.12 # 0.12 -> activate ~ 80% of the time, decrease to slow down
 )
 
