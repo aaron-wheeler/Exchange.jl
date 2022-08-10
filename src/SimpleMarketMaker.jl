@@ -12,7 +12,7 @@ function get_LOB_details(ticker)
     return bid_price, ask_price, spread 
 end
 
-function post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+function post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
     # determine price
     _, ask_price, spread = get_LOB_details(ticker)
     liquidity_mean = max(tick_size, tick_size - OB_imbalance*(spread))
@@ -21,7 +21,7 @@ function post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volum
     limit_price = round((ask_price - spread - liquidity_demand); digits=2)
     # determine volume
     vol_disparity = 1 + (OB_imbalance)
-    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
+    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
     order_id = Exchange.ORDER_ID_COUNTER[] += 1
@@ -29,7 +29,7 @@ function post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volum
     order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
 end
 
-function post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+function post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
     # determine price
     bid_price, _, spread = get_LOB_details(ticker)
     liquidity_mean = max(tick_size, tick_size + OB_imbalance*(spread))
@@ -38,7 +38,7 @@ function post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volum
     limit_price = round((bid_price + spread + liquidity_demand); digits=2)
     # determine volume
     vol_disparity = 1 - (OB_imbalance)
-    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
+    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
     order_id = Exchange.ORDER_ID_COUNTER[] += 1
@@ -47,7 +47,7 @@ function post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volum
     order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",limit_price,limit_size,id)
 end
 
-function post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+function post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
     # determine raised price
     _, ask_price, spread = get_LOB_details(ticker)
     liquidity_mean = max(tick_size, tick_size*(1 - OB_imbalance*(spread)))
@@ -56,7 +56,7 @@ function post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location
     limit_price = round((ask_price - spread + liquidity_demand); digits=2)
     # determine volume
     vol_disparity = 1 + (OB_imbalance)
-    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
+    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
     order_id = Exchange.ORDER_ID_COUNTER[] += 1
@@ -64,7 +64,7 @@ function post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location
     order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
 end
 
-function post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+function post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
     # determine lower price
     bid_price, _, spread = get_LOB_details(ticker)
     liquidity_mean = max(tick_size, tick_size*(1 + OB_imbalance*(spread)))
@@ -73,7 +73,7 @@ function post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location
     limit_price = round((bid_price + spread - liquidity_demand); digits=2)
     # determine volume
     vol_disparity = 1 - (OB_imbalance)
-    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^2 # order book stability term
+    equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
     order_id = Exchange.ORDER_ID_COUNTER[] += 1
@@ -87,7 +87,7 @@ end
 function MM_run(ticker, market_open, market_close, parameters, server_info)
     # unpack parameters
     # min_side_volume,tick_size,volume_location,volume_scale,volume_shape,orderid,pareto_threshold  = parameters
-    min_side_volume,tick_size,volume_location,volume_scale,volume_shape,pareto_threshold  = parameters
+    min_side_volume,tick_size,volume_location,volume_scale,volume_shape,equil_scale,pareto_threshold  = parameters
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
@@ -117,21 +117,21 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
             continue
         elseif bid_volume < min_side_volume && ask_volume ≥ min_side_volume
             # place new bid side (BUY) limit order to stabilize OB
-            post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+            post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
             # retrieve updated OB_imbalance
             OB_imbalance, _, _ = get_OB_orderflow(ticker)
         elseif ask_volume < min_side_volume && bid_volume ≥ min_side_volume
             # place new ask side (SELL) limit order to stabilize OB
-            post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+            post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
             # retrieve updated OB_imbalance
             OB_imbalance, _, _ = get_OB_orderflow(ticker)
         else
             # place new bid side (BUY) and ask side (SELL) limit orders to stabilize OB
             # first, stabilize selloff
-            post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+            post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
             # then, stabilize buying spree
             OB_imbalance, _, _ = get_OB_orderflow(ticker) # use updated OB info
-            post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+            post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
             # finally, retrieve updated OB_imbalance
             OB_imbalance, _, _ = get_OB_orderflow(ticker)
         end
@@ -144,10 +144,10 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
     
             if rand() ≤ prob_ask
                 # place new ask side (SELL) limit order with higher price
-                post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+                post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
                 # raise price of best bid side (BUY) limit order, TODO: Consider using updated OB_imbalance for contra quote?
                 active_buy_orders = Client.getActiveBuyOrders(id, ticker)
-                post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+                post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
                 # cancel old bid side (BUY) limit order
                 if !isempty(active_buy_orders)
                     void_buy = rand(active_buy_orders)[2]
@@ -155,10 +155,10 @@ function MM_run(ticker, market_open, market_close, parameters, server_info)
                 end
             else
                 # place new bid side (BUY) limit order with lower price
-                post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+                post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
                 # lower price of best ask side (SELL) limit order, TODO: Consider using updated OB_imbalance for contra quote?
                 active_sell_orders = Client.getActiveSellOrders(id, ticker)
-                post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, id)
+                post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
                 # cancel old ask side (SELL) limit order
                 if !isempty(active_sell_orders)
                     void_sell = rand(active_sell_orders)[2]

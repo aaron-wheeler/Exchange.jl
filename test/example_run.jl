@@ -7,7 +7,7 @@ parameters = (
     volume_location = 50, # location for order size distribution
     volume_scale = 10, # scale for order size distribution
     volume_shape = 1, # shape for order size distribution
-    # orderid = 1234, # arbitrary (for now)
+    equil_scale = 1.2, # scaling factor or order volume equilibration term
     pareto_threshold = 0.12 # 0.12 -> activate ~ 80% of the time, decrease to slow down
 )
 
