@@ -86,7 +86,6 @@ end
 
 function MM_run(ticker, market_open, market_close, parameters, server_info)
     # unpack parameters
-    # min_side_volume,tick_size,volume_location,volume_scale,volume_shape,orderid,pareto_threshold  = parameters
     min_side_volume,tick_size,volume_location,volume_scale,volume_shape,equil_scale,pareto_threshold  = parameters
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker

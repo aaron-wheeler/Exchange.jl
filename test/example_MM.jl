@@ -24,4 +24,4 @@ market_close = market_open + Dates.Second(45)
 
 MM_run(ticker, market_open, market_close, parameters, server_info)
 
-# include("test/example_run.jl")
+# include("test/example_MM.jl")
