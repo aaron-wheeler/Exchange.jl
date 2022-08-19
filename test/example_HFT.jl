@@ -12,16 +12,18 @@ parameters = (
 )
 
 server_info = (
-    host_ip_address = "0.0.0.0",
+    # host_ip_address = "0.0.0.0",
+    host_ip_address = "128.253.116.232",
     port = "8080",
-    username = "Market Maker",
-    password = "liquidity123"
+    username = "HFTrader",
+    password = "HFT123"
 )
 
-# ticker = 1
-# market_open = Dates.now() + Dates.Second(10) # DateTime(2022,7,19,13,19,41,036)
-# market_close = market_open + Dates.Second(45)
+num_tickers = 2
+num_HFT = 20
+market_open = Dates.now() + Dates.Second(15) # DateTime(2022,7,19,13,19,41,036)
+market_close = market_open + Dates.Second(5)
 
-# MM_run(ticker, market_open, market_close, parameters, server_info)
+HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, server_info)
 
 # include("test/example_HFT.jl")

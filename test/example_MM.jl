@@ -22,6 +22,6 @@ ticker = 1
 market_open = Dates.now() + Dates.Second(10) # DateTime(2022,7,19,13,19,41,036)
 market_close = market_open + Dates.Second(45)
 
-MM_run(ticker, market_open, market_close, parameters, server_info)
+MM_run!(ticker, market_open, market_close, parameters, server_info)
 
 # include("test/example_MM.jl")
