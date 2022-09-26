@@ -102,13 +102,13 @@ function MM_run!(ticker, market_open, market_close, parameters, server_info)
 
     # hold off trading until the market opens
     if Dates.now() < market_open
-        @info "Waiting until market open..."
+        @info "(MM) Waiting until market open..."
         pre_market_time = Dates.value(market_open - now()) / 1000 # convert to secs
         sleep(pre_market_time)
     end
 
     # execute trades until the market closes
-    @info "Initiating trade sequence now."
+    @info "(MM) Initiating trade sequence now."
     while Dates.now() < market_close
         # Check stability of OB
         OB_imbalance, bid_volume, ask_volume = get_OB_orderflow(ticker)
@@ -166,5 +166,5 @@ function MM_run!(ticker, market_open, market_close, parameters, server_info)
             end
         end
     end
-    @info "Trade sequence complete."
+    @info "(MM) Trade sequence complete."
 end

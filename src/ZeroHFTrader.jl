@@ -213,13 +213,13 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
 
     # hold off trading until the market opens
     if Dates.now() < market_open
-        @info "Waiting until market open..."
+        @info "(HFTrader) Waiting until market open..."
         pre_market_time = Dates.value(market_open - now()) / 1000 # convert to secs
         sleep(pre_market_time)
     end
 
     # execute trades until the market closes
-    @info "Initiating trade sequence now."
+    @info "(HFTrader) Initiating trade sequence now."
     while Dates.now() < market_close
         # determine order of HFTrader trading sequence
         shuffle!(HFT_id)
@@ -314,5 +314,5 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
             end
         end
     end
-    @info "Trade sequence complete."
+    @info "(HFTrader) Trade sequence complete."
 end
