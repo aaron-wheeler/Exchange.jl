@@ -9,6 +9,33 @@ using JuMP
 import Ipopt
 
 # ====================================================================== #
+# #----- Initialization Procedure -----#
+
+function post_rand_quotes(ticker, num_quotes, unit_trade_size, id)
+    # send random orders
+    P_t, S_ref_0 = get_LOB_details(ticker)
+    rand_ϵ = [rand(-0.5:0.01:0.5) for _ in 1:num_quotes]
+    # compute limit prices
+    S_bid = S_ref_0 .* (1 .+ rand_ϵ')
+    P_bid = round.(P_t .- S_bid, digits=2)
+    S_ask = S_ref_0 .* (1 .+ rand_ϵ')
+    P_ask = round.(P_t .+ S_ask, digits=2)
+    # post quotes
+    for i in 1:num_quotes
+        # post ask quote
+        order_id = Exchange.ORDER_ID_COUNTER[] += 1
+        order_id *= -1
+        order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask[i],unit_trade_size,id)
+        # println("SELL: price = $(P_ask[i]), size = $(unit_trade_size).")
+        # post bid quote
+        order_id = Exchange.ORDER_ID_COUNTER[] += 1
+        order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid[i],unit_trade_size,id)
+        # println("BUY: price = $(P_bid[i]), size = $(unit_trade_size).")
+    end
+
+    return P_t, S_ref_0
+end
+
 # #----- Incoming net flow (ν_ϵ) mean and variance estimates -----#
 
 # initialize Empirical Response Table
@@ -41,9 +68,10 @@ end
 
 # ======================================================================================== #
 
-function AdaptiveMM_run!(ticker, market_open, market_close, parameters, server_info)
+function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info)
     # unpack parameters
     η_ms,γ,δ_tol,inventory_limit,unit_trade_size  = parameters
+    cash, z, num_rand_quotes = init_conditions
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
@@ -67,8 +95,15 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, server_i
     # execute trades until the market closes
     @info "(Adaptive MM) Initiating trade sequence now."
     while Dates.now() < market_close
-        # initialization step
-        # TODO
+        #----- Initialization Step -----#
+        P_last, S_ref_last = post_rand_quotes(ticker, num_quotes, unit_trade_size, id)
+        # wait 0.35 seconds
+        # retrieve trades (use P_last, S_ref_last to get ϵ)
+        # cancel unfilled trades
+        # construct Empirical Response Table
+
+        # Update Estimators: Least Squares
+        # TODO: How to get data for orders that were filled? Sol -> Store order_id's and short term data in indexed tuple..
 
         # retrieve current market conditions
         P_t, S_ref_0 = get_LOB_details(ticker)
@@ -209,20 +244,25 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, server_i
         x_frac = round(value.(x_frac), digits = 2)
         if z > 0
             # positive inventory -> hedge via sell order
-            # println("Hedge sell order -> sell $(x_frac*z) shares")
+            order_size = -round(Int, (x_frac*z))
+            # println("Hedge sell order -> sell $(order_size) shares")
             # SUBMIT SELL MARKET ORDER
-            # println("Inventory z = $(z) -> z = $(z*(1 - x_frac))")
-            nothing
+            order_id = Exchange.ORDER_ID_COUNTER[] += 1
+            order_id *= -1
+            order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
             # UPDATE z
-            nothing
+            # println("Inventory z = $(z) -> z = $(z - order_size)")
+            z -= order_size
         elseif z < 0
             # negative inventory -> hedge via buy order
-            # println("Hedge buy order -> buy $(x_frac*z) shares")
+            order_size = round(Int, (x_frac*z))
+            # println("Hedge buy order -> buy $(order_size) shares")
             # SUBMIT BUY MARKET ORDER
-            # println("Inventory z = $(z) -> z = $(z*(1 - x_frac))")
-            nothing
+            order_id = Exchange.ORDER_ID_COUNTER[] += 1
+            order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
             # UPDATE z
-            nothing
+            # println("Inventory z = $(z) -> z = $(z - order_size)")
+            z += order_size
         end
 
         # wait 0.35 seconds
