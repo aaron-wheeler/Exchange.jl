@@ -273,7 +273,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         
         # STEP 2: Skew one side (buy/sell) to attract a flow that offsets current inventory
         # initialize -
-        cost2 = Model(Ipopt.Optimizer)
+        cost2 = JuMP.Model(Ipopt.Optimizer)
         set_silent(cost2)
         ϵ_skew = 0 # scalar
         @variable(cost2, ϵ_skew)
@@ -358,7 +358,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         # Determine the fraction of current inventory to hedge (by initiating offsetting trade)
 
         # initialize -
-        cost_hedge = Model(Ipopt.Optimizer)
+        cost_hedge = JuMP.Model(Ipopt.Optimizer)
         set_silent(cost_hedge)
         x_frac = 0 # scalar
         Z = z # scalar
