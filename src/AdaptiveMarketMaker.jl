@@ -148,12 +148,12 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         if initiated != true
             #----- Initialization Step -----#
             # preallocate init quote vectors
-            bid_order_ids_t = zeros(Int, num_quotes)
-            bid_ϵ_vals_t = zeros(Float64, num_quotes)
-            bid_ν_ϵ_t = fill(unit_trade_size, num_quotes)
-            ask_order_ids_t = zeros(Int, num_quotes)
-            ask_ϵ_vals_t = zeros(Float64, num_quotes)
-            ask_ν_ϵ_t = fill(unit_trade_size, num_quotes)
+            bid_order_ids_t = zeros(Int, num_init_quotes)
+            bid_ϵ_vals_t = zeros(Float64, num_init_quotes)
+            bid_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
+            ask_order_ids_t = zeros(Int, num_init_quotes)
+            ask_ϵ_vals_t = zeros(Float64, num_init_quotes)
+            ask_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
             
             # post init quotes
             trade_volume_last = OMS.trade_volume_t[ticker]
@@ -195,7 +195,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
                                         bid_ϵ_vals_t, ask_ν_ϵ_t, ask_ϵ_vals_t)
 
             # construct Empirical Response Table
-            ν_ϵ, s_ϵ, A = construct_ERTable(P_last, S_ref_last, num_quotes, bid_ϵ_vals_t,
+            ν_ϵ, s_ϵ, A = construct_ERTable(P_last, S_ref_last, num_init_quotes, bid_ϵ_vals_t,
                                                 bid_ν_ϵ_t, ask_ϵ_vals_t, ask_ν_ϵ_t)
 
             # compute initial least squares estimators
