@@ -14,7 +14,7 @@ import Ipopt
 function post_rand_quotes(ticker, num_quotes, unit_trade_size, id,
                     bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t)
     # send random orders
-    P_t, S_ref_0 = get_LOB_details(ticker)
+    P_t, S_ref_0 = get_price_details(ticker)
     rand_ϵ = [rand(-0.5:0.01:0.5) for _ in 1:num_quotes]
     # compute limit prices
     S_bid = S_ref_0 .* (1 .+ rand_ϵ')
@@ -58,7 +58,7 @@ function update_init_cash_inventory(cash, z, P_last, S_ref_last, bid_ν_ϵ_t,
     return round(cash, digits=2), z
 end
 
-# #----- Incoming net flow (ν_ϵ) mean and variance estimates -----#
+# #----- Incoming net flow (ν_ϵ) & normalized spread PnL (s_ϵ) mean and variance estimates -----#
 
 # initialize Empirical Response Table
 function construct_ERTable(P_last, S_ref_last, num_quotes, bid_ϵ_vals_t,
@@ -71,27 +71,13 @@ function construct_ERTable(P_last, S_ref_last, num_quotes, bid_ϵ_vals_t,
     # compute incoming net flow
     ν_ϵ = vcat(bid_ν_ϵ_t, ask_ν_ϵ_t)
     # compute normalized spread PnL -> ν_ϵ*S_ref*(1 + ϵ)) / S_ref
-    s_ϵ = [((ν_ϵ_t[i]*A[:, 2][i]*(1 + A[:, 3][i])) / (A[:, 2][i])) for i in 1:size(A, 1)]
+    s_ϵ = [((ν_ϵ[i]*A[:, 2][i]*(1 + A[:, 3][i])) / (A[:, 2][i])) for i in 1:size(A, 1)]
     return ν_ϵ, s_ϵ, A
 end
 
-# compute initial least squares estimator
-
-# compute the online variance
-
-
-# #----- Normalized spread PnL (s_ϵ) mean and variance estimates -----#
-
-# initialize Empirical Response Table
-
-# compute initial least squares estimator
-
-# compute the online variance 
-
-
 # #----- Utility functions -----#
 
-function get_LOB_details(ticker)
+function get_price_details(ticker)
     bid_price, ask_price = Client.getBidAsk(ticker)
     mid_price = round(((ask_price + bid_price) / 2.0); digits=2) # current mid_price
     spread = ask_price - bid_price
@@ -106,8 +92,6 @@ function compute_mse(y_true, x, A)
     loss = sum((y_true .- y_pred).^2) / length(y_true)
     return loss
 end
-
-# calculate the volatility σ
 
 # ======================================================================================== #
 
@@ -156,7 +140,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             ask_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
             
             # post init quotes
-            trade_volume_last = OMS.trade_volume_t[ticker]
+            trade_volume_last = Client.getTradeVolume(ticker)
             P_last, S_ref_last, bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t = post_rand_quotes(ticker, num_init_quotes, unit_trade_size, id, 
                                     bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t)
 
@@ -164,14 +148,17 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             sleep(trade_freq)
             while length(Client.getActiveSellOrders(id, ticker)) == num_init_quotes && length(Client.getActiveBuyOrders(id, ticker)) == num_init_quotes
                 sleep(trade_freq)
+                if Dates.now() > market_close
+                    break
+                end
             end
-            trade_volume_t = OMS.trade_volume_t[ticker]
+            trade_volume_t = Client.getTradeVolume(ticker)
 
             # retrieve data for unfilled orders
             active_sell_orders = Client.getActiveSellOrders(id, ticker)
             for i in eachindex(active_sell_orders)
                 # retrieve order
-                unfilled_sell = rand(active_sell_orders[i])[2]
+                unfilled_sell = (active_sell_orders[i])[2]
                 # cancel unfilled order
                 cancel_order = Client.cancelQuote(ticker,unfilled_sell.orderid,"SELL_ORDER",unfilled_sell.price,id)
                 # store data
@@ -182,7 +169,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             active_buy_orders = Client.getActiveBuyOrders(id, ticker)
             for i in eachindex(active_buy_orders)
                 # retrieve order
-                unfilled_buy = rand(active_buy_orders[i])[2]
+                unfilled_buy = (active_buy_orders[i])[2]
                 # cancel unfilled order
                 cancel_order = Client.cancelQuote(ticker,unfilled_buy.orderid,"BUY_ORDER",unfilled_buy.price,id)
                 # store data
@@ -220,18 +207,25 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             # compute total market volume (for individual ticker) in last time interval
             V_market = trade_volume_t - trade_volume_last
 
-            # compute the volatility σ
-            log_returns = [log(P_rounds[i+1] / P_rounds[i]) for i in 1:(num_rounds -1)]
-            mean_return = sum(log_returns) / length(log_returns)
-            return_variance = sum((log_returns .- mean_return).^2) / (length(log_returns) - 1)
-            σ = sqrt(return_variance) # volatility
+            # set the initial volatility σ
+            σ = 0.15 # average historical stock volatility
+
+            # TODO: Configure for multiple initialization rounds
+            # # retrieve current market conditions (current mid-price and side-spread)
+            # P_t, S_ref_0 = get_price_details(ticker)
+
+            # # compute the volatility σ
+            # log_returns = [log(P_rounds[i+1] / P_rounds[i]) for i in 1:(num_rounds -1)]
+            # mean_return = sum(log_returns) / length(log_returns)
+            # return_variance = sum((log_returns .- mean_return).^2) / (length(log_returns) - 1)
+            # σ = sqrt(return_variance) # volatility
 
             # complete initialization step
             initiated = true
         end
         
         # retrieve current market conditions (current mid-price and side-spread)
-        P_t, S_ref_0 = get_LOB_details(ticker)
+        P_t, S_ref_0 = get_price_details(ticker)
         new_bid[1] = P_t
         new_ask[1] = P_t
         new_bid[2] = S_ref_0
@@ -292,7 +286,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         optimize!(cost2)
 
         # execute actions (submit quotes)
-        trade_volume_last = OMS.trade_volume_t[ticker]
+        trade_volume_last = Client.getTradeVolume(ticker)
         if z > 0
             # positive inventory -> skew sell-side order
             ϵ_buy = ϵ_buy
@@ -401,7 +395,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
 
         # wait 'trade_freq' seconds and reset data structures
         sleep(trade_freq)
-        trade_volume_t = OMS.trade_volume_t[ticker]
+        trade_volume_t = Client.getTradeVolume(ticker)
         ν_new_bid = [unit_trade_size]
         ν_new_ask = [unit_trade_size]
         ν_new = 0
@@ -414,7 +408,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         active_buy_orders = Client.getActiveBuyOrders(id, ticker)
         for i in eachindex(active_buy_orders)
             # retrieve order
-            unfilled_buy = first(active_buy_orders[i])[2]
+            unfilled_buy = (active_buy_orders[i])[2]
             # cancel unfilled order
             cancel_order = Client.cancelQuote(ticker,unfilled_buy.orderid,"BUY_ORDER",unfilled_buy.price,id)
             # store data
@@ -425,7 +419,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         active_sell_orders = Client.getActiveSellOrders(id, ticker)
         for i in eachindex(active_sell_orders)
             # retrieve order
-            unfilled_sell = first(active_sell_orders[i])[2]
+            unfilled_sell = (active_sell_orders[i])[2]
             # cancel unfilled order
             cancel_order = Client.cancelQuote(ticker,unfilled_sell.orderid,"SELL_ORDER",unfilled_sell.price,id)
             # store data
