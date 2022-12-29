@@ -8,7 +8,9 @@ parameters = (
     volume_scale = 10, # scale for order size distribution
     volume_shape = 1, # shape for order size distribution
     equil_scale = 1.2, # scaling factor or order volume equilibration term
-    pareto_threshold = 0.12 # 0.12 -> activate ~ 80% of the time, decrease to slow down
+    pareto_threshold = 0.12, # 0.12 -> activate ~ 80% of the time, decrease to slow down
+    prob_wait = 0.5, # probability of halting
+    trade_freq = 1 # how many seconds to halt market making
 )
 
 server_info = (

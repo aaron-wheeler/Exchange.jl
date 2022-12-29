@@ -196,7 +196,7 @@ end
 
 function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, server_info)
     # unpack parameters
-    prob_activation,init_hist_volatility,price_μ,price_θ,tick_size,volume_α,volume_β = parameters
+    prob_wait,trade_freq,prob_activation,init_hist_volatility,price_μ,price_θ,tick_size,volume_α,volume_β = parameters
     host_ip_address, port, username, password = server_info
 
     # connect to brokerage
@@ -224,6 +224,10 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
         # determine order of HFTrader trading sequence
         shuffle!(HFT_id)
         for i in eachindex(HFT_id)
+            # wait 'trade_freq' seconds
+            if rand() <= prob_wait
+                sleep(trade_freq)
+            end
             id = HFT_id[i]
             index = HFT_id[i] - num_tickers
             # determine order of tickers to trade

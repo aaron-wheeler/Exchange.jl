@@ -2,6 +2,8 @@ using Exchange, Dates
 
 ## Example use case
 parameters = (
+    prob_wait = 0.5, # probability of halting (per HFTrader)
+    trade_freq = 1, # how many seconds to halt trading
     prob_activation = 0.99, # percentage of time that HFTraders actively trade
     init_hist_volatility = 0.2, # starting volatility; constant (for now)
     price_μ = 0.2, # location param for price distribution (Gumbel)

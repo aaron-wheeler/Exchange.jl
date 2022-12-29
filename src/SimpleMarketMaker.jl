@@ -86,7 +86,7 @@ end
 
 function MM_run!(ticker, market_open, market_close, parameters, server_info)
     # unpack parameters
-    min_side_volume,tick_size,volume_location,volume_scale,volume_shape,equil_scale,pareto_threshold  = parameters
+    min_side_volume,tick_size,volume_location,volume_scale,volume_shape,equil_scale,pareto_threshold,prob_wait,trade_freq = parameters
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
@@ -140,7 +140,10 @@ function MM_run!(ticker, market_open, market_close, parameters, server_info)
         if rand(prob_activation) < pareto_threshold && spread > 0.02
             # activate and execute supply & demand order process
             prob_ask = (1/2)*(OB_imbalance + 1)
-    
+            # wait 'trade_freq' seconds
+            if rand() <= prob_wait
+                sleep(trade_freq)
+            end
             if rand() ≤ prob_ask
                 # place new ask side (SELL) limit order with higher price
                 post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
