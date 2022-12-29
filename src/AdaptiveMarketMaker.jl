@@ -98,7 +98,7 @@ end
 function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info)
     # unpack parameters
     η_ms,γ,δ_tol,inventory_limit,unit_trade_size,trade_freq = parameters
-    cash, z, num_init_quotes = init_conditions
+    cash, z, num_init_quotes, num_init_rounds = init_conditions
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
@@ -131,59 +131,71 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
     while Dates.now() < market_close
         if initiated != true
             #----- Initialization Step -----#
-            # preallocate init quote vectors
-            bid_order_ids_t = zeros(Int, num_init_quotes)
-            bid_ϵ_vals_t = zeros(Float64, num_init_quotes)
-            bid_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
-            ask_order_ids_t = zeros(Int, num_init_quotes)
-            ask_ϵ_vals_t = zeros(Float64, num_init_quotes)
-            ask_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
-            
-            # post init quotes
-            trade_volume_last = Client.getTradeVolume(ticker)
-            P_last, S_ref_last, bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t = post_rand_quotes(ticker, num_init_quotes, unit_trade_size, id, 
-                                    bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t)
+            # preallocate storage for empirical variables
+            A = zeros(Float64, (num_init_quotes * num_init_rounds), 3)
+            ν_ϵ = zeros(num_init_quotes * num_init_rounds)
+            s_ϵ = zeros(num_init_quotes * num_init_rounds)
 
-            # wait 'trade_freq' seconds (at least), and longer if no quotes filled
-            sleep(trade_freq)
-            while length(Client.getActiveSellOrders(id, ticker)) == num_init_quotes && length(Client.getActiveBuyOrders(id, ticker)) == num_init_quotes
+            for cycle in 1:num_init_rounds
+                # preallocate init quote vectors
+                bid_order_ids_t = zeros(Int, num_init_quotes)
+                bid_ϵ_vals_t = zeros(Float64, num_init_quotes)
+                bid_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
+                ask_order_ids_t = zeros(Int, num_init_quotes)
+                ask_ϵ_vals_t = zeros(Float64, num_init_quotes)
+                ask_ν_ϵ_t = fill(unit_trade_size, num_init_quotes)
+                
+                # post init quotes
+                trade_volume_last = Client.getTradeVolume(ticker)
+                P_last, S_ref_last, bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t = post_rand_quotes(ticker, num_init_quotes, unit_trade_size, id, 
+                                        bid_order_ids_t, bid_ϵ_vals_t, ask_order_ids_t, ask_ϵ_vals_t)
+
+                # wait 'trade_freq' seconds (at least), and longer if no quotes filled
                 sleep(trade_freq)
-                if Dates.now() > market_close
-                    break
+                while length(Client.getActiveSellOrders(id, ticker)) == num_init_quotes && length(Client.getActiveBuyOrders(id, ticker)) == num_init_quotes
+                    sleep(trade_freq)
+                    if Dates.now() > market_close
+                        break
+                    end
                 end
+                trade_volume_t = Client.getTradeVolume(ticker)
+
+                # retrieve data for unfilled orders
+                active_sell_orders = Client.getActiveSellOrders(id, ticker)
+                for i in eachindex(active_sell_orders)
+                    # retrieve order
+                    unfilled_sell = (active_sell_orders[i])[2]
+                    # cancel unfilled order
+                    cancel_order = Client.cancelQuote(ticker,unfilled_sell.orderid,"SELL_ORDER",unfilled_sell.price,id)
+                    # store data
+                    idx = findfirst(x -> x==unfilled_sell.orderid, ask_order_ids_t)
+                    ask_ν_ϵ_t[idx] = unit_trade_size - unfilled_sell.size
+                end
+
+                active_buy_orders = Client.getActiveBuyOrders(id, ticker)
+                for i in eachindex(active_buy_orders)
+                    # retrieve order
+                    unfilled_buy = (active_buy_orders[i])[2]
+                    # cancel unfilled order
+                    cancel_order = Client.cancelQuote(ticker,unfilled_buy.orderid,"BUY_ORDER",unfilled_buy.price,id)
+                    # store data
+                    idx = findfirst(x -> x==unfilled_buy.orderid, bid_order_ids_t)
+                    bid_ν_ϵ_t[idx] = unit_trade_size - unfilled_buy.size
+                end
+
+                # adjust cash and inventory
+                cash, z = update_init_cash_inventory(cash, z, P_last, S_ref_last, bid_ν_ϵ_t,
+                                            bid_ϵ_vals_t, ask_ν_ϵ_t, ask_ϵ_vals_t)
+
+                # construct Empirical Response Table
+                ν_ϵ_t, s_ϵ_t, A_t = construct_ERTable(P_last, S_ref_last, num_init_quotes, bid_ϵ_vals_t,
+                                                    bid_ν_ϵ_t, ask_ϵ_vals_t, ask_ν_ϵ_t)
+
+                # update variables
+                A[((1+num_init_quotes*(cycle-1)):(num_init_quotes*cycle)),:] = A_t
+                ν_ϵ[((1+num_init_quotes*(cycle-1)):(num_init_quotes*cycle))] = ν_ϵ_t
+                s_ϵ[((1+num_init_quotes*(cycle-1)):(num_init_quotes*cycle))] = s_ϵ_t
             end
-            trade_volume_t = Client.getTradeVolume(ticker)
-
-            # retrieve data for unfilled orders
-            active_sell_orders = Client.getActiveSellOrders(id, ticker)
-            for i in eachindex(active_sell_orders)
-                # retrieve order
-                unfilled_sell = (active_sell_orders[i])[2]
-                # cancel unfilled order
-                cancel_order = Client.cancelQuote(ticker,unfilled_sell.orderid,"SELL_ORDER",unfilled_sell.price,id)
-                # store data
-                idx = findfirst(x -> x==unfilled_sell.orderid, ask_order_ids_t)
-                ask_ν_ϵ_t[idx] = unit_trade_size - unfilled_sell.size
-            end
-
-            active_buy_orders = Client.getActiveBuyOrders(id, ticker)
-            for i in eachindex(active_buy_orders)
-                # retrieve order
-                unfilled_buy = (active_buy_orders[i])[2]
-                # cancel unfilled order
-                cancel_order = Client.cancelQuote(ticker,unfilled_buy.orderid,"BUY_ORDER",unfilled_buy.price,id)
-                # store data
-                idx = findfirst(x -> x==unfilled_buy.orderid, bid_order_ids_t)
-                bid_ν_ϵ_t[idx] = unit_trade_size - unfilled_buy.size
-            end
-
-            # adjust cash and inventory
-            cash, z = update_init_cash_inventory(cash, z, P_last, S_ref_last, bid_ν_ϵ_t,
-                                        bid_ϵ_vals_t, ask_ν_ϵ_t, ask_ϵ_vals_t)
-
-            # construct Empirical Response Table
-            ν_ϵ, s_ϵ, A = construct_ERTable(P_last, S_ref_last, num_init_quotes, bid_ϵ_vals_t,
-                                                bid_ν_ϵ_t, ask_ϵ_vals_t, ask_ν_ϵ_t)
 
             # compute initial least squares estimators
             x_QR_ν = A \ ν_ϵ # QR Decomposition
@@ -207,18 +219,20 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             # compute total market volume (for individual ticker) in last time interval
             V_market = trade_volume_t - trade_volume_last
 
-            # set the initial volatility σ
-            σ = 0.15 # average historical stock volatility
+            # retrieve historical price info for volatility calculation
+            P_hist = A[:, 1]
+            P_rounds = Float64[]
+            for (index, value) in enumerate(P_hist)
+                if index % num_init_rounds == 0
+                    P_rounds = push!(P_rounds, value)
+                end
+            end
 
-            # TODO: Configure for multiple initialization rounds
-            # # retrieve current market conditions (current mid-price and side-spread)
-            # P_t, S_ref_0 = get_price_details(ticker)
-
-            # # compute the volatility σ
-            # log_returns = [log(P_rounds[i+1] / P_rounds[i]) for i in 1:(num_rounds -1)]
-            # mean_return = sum(log_returns) / length(log_returns)
-            # return_variance = sum((log_returns .- mean_return).^2) / (length(log_returns) - 1)
-            # σ = sqrt(return_variance) # volatility
+            # compute the volatility σ
+            log_returns = [log(P_rounds[i+1] / P_rounds[i]) for i in 1:(num_init_rounds -1)]
+            mean_return = sum(log_returns) / length(log_returns)
+            return_variance = sum((log_returns .- mean_return).^2) / (length(log_returns) - 1)
+            σ = sqrt(return_variance) # volatility
 
             # complete initialization step
             initiated = true

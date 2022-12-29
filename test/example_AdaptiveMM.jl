@@ -13,7 +13,8 @@ parameters = (
 init_conditions = (
     cash = 0, # initial cash balance
     z = 0, # initial inventory
-    num_init_quotes = 5 # number of random quotes to send out initially
+    num_init_quotes = 5, # number of random quotes to send out per initialization round
+    num_init_rounds = 5 # number of initialization rounds
 )
 
 server_info = (
