@@ -131,10 +131,12 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
     while Dates.now() < market_close
         if initiated != true
             #----- Initialization Step -----#
+            early_stoppage = false
+
             # preallocate storage for empirical variables
-            A = zeros(Float64, (num_init_quotes * num_init_rounds), 3)
-            ν_ϵ = zeros(num_init_quotes * num_init_rounds)
-            s_ϵ = zeros(num_init_quotes * num_init_rounds)
+            A = zeros(Float64, (2*num_init_quotes * num_init_rounds), 3)
+            ν_ϵ = zeros(2*num_init_quotes * num_init_rounds)
+            s_ϵ = zeros(2*num_init_quotes * num_init_rounds)
 
             for cycle in 1:num_init_rounds
                 # preallocate init quote vectors
@@ -155,6 +157,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
                 while length(Client.getActiveSellOrders(id, ticker)) == num_init_quotes && length(Client.getActiveBuyOrders(id, ticker)) == num_init_quotes
                     sleep(trade_freq)
                     if Dates.now() > market_close
+                        early_stoppage = true
                         break
                     end
                 end
@@ -167,6 +170,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
                     unfilled_sell = (active_sell_orders[i])[2]
                     # cancel unfilled order
                     cancel_order = Client.cancelQuote(ticker,unfilled_sell.orderid,"SELL_ORDER",unfilled_sell.price,id)
+                    early_stoppage == true ? break : nothing
                     # store data
                     idx = findfirst(x -> x==unfilled_sell.orderid, ask_order_ids_t)
                     ask_ν_ϵ_t[idx] = unit_trade_size - unfilled_sell.size
@@ -178,6 +182,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
                     unfilled_buy = (active_buy_orders[i])[2]
                     # cancel unfilled order
                     cancel_order = Client.cancelQuote(ticker,unfilled_buy.orderid,"BUY_ORDER",unfilled_buy.price,id)
+                    early_stoppage == true ? break : nothing
                     # store data
                     idx = findfirst(x -> x==unfilled_buy.orderid, bid_order_ids_t)
                     bid_ν_ϵ_t[idx] = unit_trade_size - unfilled_buy.size
@@ -188,18 +193,21 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
                                             bid_ϵ_vals_t, ask_ν_ϵ_t, ask_ϵ_vals_t)
 
                 # construct Empirical Response Table
+                early_stoppage == true ? break : nothing
                 ν_ϵ_t, s_ϵ_t, A_t = construct_ERTable(P_last, S_ref_last, num_init_quotes, bid_ϵ_vals_t,
                                                     bid_ν_ϵ_t, ask_ϵ_vals_t, ask_ν_ϵ_t)
 
                 # update variables
-                A[((1+num_init_quotes*(cycle-1)):(num_init_quotes*cycle)),:] = A_t
-                ν_ϵ[((1+num_init_quotes*(cycle-1)):(num_init_quotes*cycle))] = ν_ϵ_t
-                s_ϵ[((1+num_init_quotes*(cycle-1)):(num_init_quotes*cycle))] = s_ϵ_t
+                # println("A_t = ", A_t)
+                A[((1+2*num_init_quotes*(cycle-1)):(2*num_init_quotes*cycle)),:] = A_t
+                ν_ϵ[((1+2*num_init_quotes*(cycle-1)):(2*num_init_quotes*cycle))] = ν_ϵ_t
+                s_ϵ[((1+2*num_init_quotes*(cycle-1)):(2*num_init_quotes*cycle))] = s_ϵ_t
             end
 
             # compute initial least squares estimators
             x_QR_ν = A \ ν_ϵ # QR Decomposition
             x_QR_s = A \ s_ϵ # QR Decomposition
+            # println("A = ", A)
             𝐏_old = inv(A' * A) # for Recursive Least Squares step
 
             # compute and store loss (for plotting)
@@ -235,9 +243,15 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             σ = sqrt(return_variance) # volatility
 
             # complete initialization step
+            @info " (Adaptive MM) Initialization rounds complete. Starting RLS procedure now."
             initiated = true
         end
-        
+
+        # check stopping condition
+        if Dates.now() > market_close
+            break
+        end
+
         # retrieve current market conditions (current mid-price and side-spread)
         P_t, S_ref_0 = get_price_details(ticker)
         new_bid[1] = P_t
