@@ -1,12 +1,12 @@
 using Brokerage, Distributions, Dates
 
 using Random
-# using Plots
 using Convex
 using ECOS
 using LinearAlgebra
 using JuMP
 import Ipopt
+using CSV, DataFrames
 
 # ====================================================================== #
 # #----- Initialization Procedure -----#
@@ -27,14 +27,14 @@ function post_rand_quotes(ticker, num_quotes, unit_trade_size, id,
         order_id = Exchange.ORDER_ID_COUNTER[] += 1
         order_id *= -1
         order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask[i],unit_trade_size,id)
-        # println("SELL: price = $(P_ask[i]), size = $(unit_trade_size).")
+        println("SELL: price = $(P_ask[i]), size = $(unit_trade_size).")
         # fill quote vector
         ask_order_ids_t[i] = order_id
 
         # post bid quote
         order_id = Exchange.ORDER_ID_COUNTER[] += 1
         order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid[i],unit_trade_size,id)
-        # println("BUY: price = $(P_bid[i]), size = $(unit_trade_size).")
+        println("BUY: price = $(P_bid[i]), size = $(unit_trade_size).")
         # fill quote vector
         bid_order_ids_t[i] = order_id
     end
@@ -47,11 +47,11 @@ end
 
 function update_init_cash_inventory(cash, z, P_last, S_ref_last, bid_ν_ϵ_t,
                                     bid_ϵ_vals_t, ask_ν_ϵ_t, ask_ϵ_vals_t)
-    # account debts
+    # balance debts
     cash -= sum(bid_ν_ϵ_t .* round.(P_last .- (S_ref_last .* (1 .+ bid_ϵ_vals_t)), digits=2))
     z += sum(bid_ν_ϵ_t)
 
-    # account credits
+    # balance credits
     cash += sum(ask_ν_ϵ_t .* round.(P_last .+ (S_ref_last .* (1 .+ ask_ϵ_vals_t)), digits=2))
     z -= sum(ask_ν_ϵ_t)
 
@@ -95,7 +95,7 @@ end
 
 # ======================================================================================== #
 
-function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info)
+function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info; collect_data = false)
     # unpack parameters
     η_ms,γ,δ_tol,inventory_limit,unit_trade_size,trade_freq = parameters
     cash, z, num_init_quotes, num_init_rounds = init_conditions
@@ -113,11 +113,37 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
     Client.createUser(username, password)
     user = Client.loginUser(username, password)
 
-    # preallocate data structures
+    # preallocate data structures and variables
     ν_ϵ_losses = Float64[]
     s_ϵ_losses = Float64[]
+    cash_data = Float64[]
+    inventory_data = Float64[]
+    # bid_quote_data = Float64[]
+    # ask_quote_data = Float64[]
+    # S_bid_data = Float64[]
+    # S_ask_data = Float64[]
+    # mid_price_data = Float64[]
+    # time_trade_data = DateTime[]
     new_bid = [0.0 0.0 0.0]
     new_ask = [0.0 0.0 0.0]
+
+    # instantiate dynamic variables
+    σ = 0
+    P_last = 0
+    x_QR_ν = zeros(3) # least squares estimator, dim: (3,)
+    V_market = 0
+    x_QR_s = zeros(3) # least squares estimator, dim: (3,)
+    sum_s = 0
+    k = 0
+    sum_ν = 0
+    var_s = 0
+    var_ν = 0
+    z = 0
+    cash = 0
+    ν_ϵ = Float64[]
+    s_ϵ = Float64[]
+    A = Float64[]
+    𝐏_old = Float64[] # dim: (3, 3)
 
     # hold off trading until the market opens
     if Dates.now() < market_open
@@ -192,13 +218,20 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
                 cash, z = update_init_cash_inventory(cash, z, P_last, S_ref_last, bid_ν_ϵ_t,
                                             bid_ϵ_vals_t, ask_ν_ϵ_t, ask_ϵ_vals_t)
 
+                # compute and store cash and inventory data
+                if collect_data == true
+                    push!(cash_data, cash)
+                    push!(inventory_data, z)
+                end
+
                 # construct Empirical Response Table
                 early_stoppage == true ? break : nothing
                 ν_ϵ_t, s_ϵ_t, A_t = construct_ERTable(P_last, S_ref_last, num_init_quotes, bid_ϵ_vals_t,
                                                     bid_ν_ϵ_t, ask_ϵ_vals_t, ask_ν_ϵ_t)
 
                 # update variables
-                # println("A_t = ", A_t)
+                println("A_t = ", A_t)
+                println("ν_ϵ_t = ", ν_ϵ_t)
                 A[((1+2*num_init_quotes*(cycle-1)):(2*num_init_quotes*cycle)),:] = A_t
                 ν_ϵ[((1+2*num_init_quotes*(cycle-1)):(2*num_init_quotes*cycle))] = ν_ϵ_t
                 s_ϵ[((1+2*num_init_quotes*(cycle-1)):(2*num_init_quotes*cycle))] = s_ϵ_t
@@ -207,14 +240,21 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             # compute initial least squares estimators
             x_QR_ν = A \ ν_ϵ # QR Decomposition
             x_QR_s = A \ s_ϵ # QR Decomposition
-            # println("A = ", A)
+            println("x_QR_ν = ", x_QR_ν)
+            println("size(x_QR_ν) = ", size(x_QR_ν))
+
+            println("A = ", A)
+            println("ν_ϵ = ", ν_ϵ)
+            println("s_ϵ = ", s_ϵ)
             𝐏_old = inv(A' * A) # for Recursive Least Squares step
 
-            # compute and store loss (for plotting)
-            ν_loss = compute_mse(ν_ϵ, x_QR_ν, A)
-            push!(ν_ϵ_losses, ν_loss)
-            s_loss = compute_mse(s_ϵ, x_QR_s, A)
-            push!(s_ϵ_losses, s_loss)
+            # compute and store loss
+            if collect_data == true
+                ν_loss = compute_mse(ν_ϵ, x_QR_ν, A)
+                push!(ν_ϵ_losses, ν_loss)
+                s_loss = compute_mse(s_ϵ, x_QR_s, A)
+                push!(s_ϵ_losses, s_loss) 
+            end
 
             # store values for online mean and variance estimates
             # https://www.johndcook.com/blog/standard_deviation/
@@ -260,7 +300,27 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         new_ask[2] = S_ref_0
 
         # update volatility estimate
-        σ = σ * sqrt(P_t - P_last) # new volatility
+        println("========================")
+        println("")
+        println("σ_old = ", σ)
+        println("P_t = ", P_t)
+        println("P_last = ", P_last)
+        println("S_ref_0 = ", S_ref_0)
+        # iszero(σ) ? σ = 0.15 : nothing # set to average empirical stock volatility
+        σ = σ * sqrt(abs(P_t - P_last)) # new volatility
+        println("σ_new = ", σ)
+
+        # check variables
+        println("sum_s = ", sum_s)
+        println("k = ", k)
+        println("sum_v = ", sum_ν)
+        println("var_ν = ", var_ν)
+        println("var_s = ", var_s)
+        println("z = ", z)
+        println("cash = ", cash)
+        println("size(ν_ϵ) = ", size(ν_ϵ))
+        println("size(s_ϵ) = ", size(s_ϵ))
+        println("size(A) = ", size(A))
 
         #----- Pricing Policy -----#
         # STEP 1: Ensure that Market Maker adapts policy if it is getting little or no trade flow
@@ -271,9 +331,17 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         t = Variable() # scalar (for absolute value)
         # setup problem (reformulate absolute value) and solve -
         prob = η_ms - (([P_t S_ref_0 ϵ_ms]*x_QR_ν)[1]) / V_market
-        problem = minimize(t, ϵ_ms >= -0.02, ϵ_ms <= 0.02, t >= prob, t >= -prob)
+        # problem = minimize(t, ϵ_ms >= -0.02, ϵ_ms <= 0.02, t >= prob, t >= -prob)
+        # problem = minimize(t, ϵ_ms >= -0.99, ϵ_ms <= (((0.5*P_t) / S_ref_0) + 1), t >= prob, t >= -prob)
+        # problem = minimize(t, t >= prob, t >= -prob)
+        problem = minimize(t)
+        problem.constraints += prob <= t
+        problem.constraints += -prob <= t
+        problem.constraints += -0.99 <= ϵ_ms
+        problem.constraints += (((0.5*P_t) / S_ref_0) + 1) >= ϵ_ms
         # Solve the problem by calling solve!
         solve!(problem, ECOS.Optimizer; silent_solver = true)
+        println("ϵ_ms = ", evaluate(ϵ_ms))
 
         # compute the ϵ that maximizes profit within δ_tol
         # initialize -
@@ -283,29 +351,33 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         prob = η_ms - (([P_t S_ref_0 ϵ_opt]*x_QR_ν)[1]) / V_market
         # setup problem and solve -
         p = maximize(ϵ_opt)
+        # p = maximize(ϵ_opt, ϵ_opt >= -0.99, ϵ_opt <= (((0.5*P_t) / S_ref_0) + 1))
         p.constraints += prob <= t
         p.constraints += -prob <= t
         p.constraints += t - cost1 <= δ_tol
         p.constraints += -(t - cost1) <= δ_tol
+        p.constraints += -0.99 <= ϵ_opt
+        p.constraints += (((0.5*P_t) / S_ref_0) + 1) >= ϵ_opt
         solve!(p, ECOS.Optimizer; silent_solver = true)
 
         # Set buy and sell ϵ values
         ϵ_buy = round(p.optval, digits = 2)
         ϵ_sell = round(p.optval, digits = 2)
+        println("ϵ_opt = ", ϵ_buy)
         
         # STEP 2: Skew one side (buy/sell) to attract a flow that offsets current inventory
         # initialize -
         cost2 = JuMP.Model(Ipopt.Optimizer)
         set_silent(cost2)
         ϵ_skew = 0 # scalar
-        @variable(cost2, ϵ_skew)
+        @variable(cost2, -0.99 ≤ ϵ_skew ≤ ((0.5*P_t) / S_ref_0) + 1) # mid-price ≤ ϵ_skew ≤ 50% * P_(bid/ask)_0 of way into book
         # setup problem -
         E_s_ϵ = ([P_t S_ref_0 ϵ_skew]*x_QR_s)[1] # expected value
         mean_s = sum_s / k
         mean_s_ϵ = mean_s + ((E_s_ϵ - mean_s) / k)
         var_s_ϵ = var_s + ((E_s_ϵ - mean_s) * (E_s_ϵ - mean_s_ϵ)) # variance
         # repeat for ν
-        E_z_ν_ϵ = z + ([P_t 0 ϵ_skew]*x_QR_ν)[1] # expected value
+        E_z_ν_ϵ = z + ([P_t S_ref_0 ϵ_skew]*x_QR_ν)[1] # expected value
         mean_ν = sum_ν / k
         mean_z_ν_ϵ = mean_ν + ((E_z_ν_ϵ - mean_ν) / k)
         var_z_ν_ϵ = var_ν + ((E_z_ν_ϵ - mean_ν) * (E_z_ν_ϵ - mean_z_ν_ϵ)) # variance
@@ -321,18 +393,21 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             ϵ_sell = round(value.(ϵ_skew), digits = 2)
             new_bid[3] = ϵ_buy
             new_ask[3] = ϵ_sell
-            # println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
+            println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
             P_bid = P_t - round(S_ref_0*(1 + ϵ_buy), digits=2)
             P_ask = P_t + round(S_ref_0*(1 + ϵ_sell), digits=2)
+            P_bid = round(P_bid, digits=2)
+            P_ask = round(P_ask, digits=2)
+            P_bid == P_ask ? continue : nothing # avoid error
             # SUBMIT QUOTES
             # post ask quote
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
             order_id *= -1
-            # println("SELL: price = $(P_ask), size = $(unit_trade_size).")
+            println("SELL: price = $(P_ask), size = $(unit_trade_size).")
             order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
             # post bid quote
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            # println("BUY: price = $(P_bid), size = $(unit_trade_size).")
+            println("BUY: price = $(P_bid), size = $(unit_trade_size).")
             order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
             # set ϵ param for hedge step
             ϵ_hedge = ϵ_sell
@@ -342,17 +417,20 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             ϵ_sell = ϵ_sell
             new_bid[3] = ϵ_buy
             new_ask[3] = ϵ_sell
-            # println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
+            println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
             P_bid = P_t - round(S_ref_0*(1 + ϵ_buy), digits=2); P_ask = P_t + round(S_ref_0*(1 + ϵ_sell), digits=2)
+            P_bid = round(P_bid, digits=2)
+            P_ask = round(P_ask, digits=2)
+            P_bid == P_ask ? continue : nothing # avoid error
             # SUBMIT QUOTES
             # post ask quote
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
             order_id *= -1
-            # println("SELL: price = $(P_ask), size = $(unit_trade_size).")
+            println("SELL: price = $(P_ask), size = $(unit_trade_size).")
             order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
             # post bid quote
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            # println("BUY: price = $(P_bid), size = $(unit_trade_size).")
+            println("BUY: price = $(P_bid), size = $(unit_trade_size).")
             order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
             # set ϵ param for hedge step
             ϵ_hedge = ϵ_buy
@@ -360,17 +438,20 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             # no inventory -> no skew
             ϵ_buy = ϵ_buy
             ϵ_sell = ϵ_sell
-            # println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
+            println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
             P_bid = P_t - round(S_ref_0*(1 + ϵ_buy), digits=2); P_ask = P_t + round(S_ref_0*(1 + ϵ_sell), digits=2)
+            P_bid = round(P_bid, digits=2)
+            P_ask = round(P_ask, digits=2)
+            P_bid == P_ask ? continue : nothing # avoid error
             # SUBMIT QUOTES
             # post ask quote
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
             order_id *= -1
-            # println("SELL: price = $(P_ask), size = $(unit_trade_size).")
+            println("SELL: price = $(P_ask), size = $(unit_trade_size).")
             order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
             # post bid quote
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            # println("BUY: price = $(P_bid), size = $(unit_trade_size).")
+            println("BUY: price = $(P_bid), size = $(unit_trade_size).")
             order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
             # set ϵ param for hedge step
             ϵ_hedge = ϵ_buy
@@ -398,32 +479,42 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
 
         # execute actions (submit hedge trades)
         x_frac = round(value.(x_frac), digits = 2)
-        if z > 0
+        order_size = round(Int, (x_frac*z))
+        if !iszero(order_size) && z > 0
             # positive inventory -> hedge via sell order
-            order_size = -round(Int, (x_frac*z))
-            # println("Hedge sell order -> sell $(order_size) shares")
+            println("Hedge sell order -> sell $(order_size) shares")
             # SUBMIT SELL MARKET ORDER
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
             order_id *= -1
             order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
             # UPDATE z
-            # println("Inventory z = $(z) -> z = $(z - order_size)")
+            println("Inventory z = $(z) -> z = $(z - order_size)")
             z -= order_size
-        elseif z < 0
+            # UPDATE cash (not accurate, temporary fix)
+            bid_price, _ = Client.getBidAsk(ticker)
+            cash += order_size*bid_price
+            cash = round(cash, digits=2)
+        elseif !iszero(order_size) && z < 0
             # negative inventory -> hedge via buy order
-            order_size = round(Int, (x_frac*z))
-            # println("Hedge buy order -> buy $(order_size) shares")
+            order_size = -order_size
+            println("Hedge buy order -> buy $(order_size) shares")
             # SUBMIT BUY MARKET ORDER
             order_id = Exchange.ORDER_ID_COUNTER[] += 1
             order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
             # UPDATE z
-            # println("Inventory z = $(z) -> z = $(z - order_size)")
+            println("Inventory z = $(z) -> z = $(z + order_size)")
             z += order_size
+            # UPDATE cash (not accurate, temporary fix)
+            _, ask_price = Client.getBidAsk(ticker)
+            cash -= order_size*ask_price
+            cash = round(cash, digits=2)
         end
 
         # wait 'trade_freq' seconds and reset data structures
         sleep(trade_freq)
         trade_volume_t = Client.getTradeVolume(ticker)
+        # ν_new_bid[1] = unit_trade_size
+        # ν_new_ask[1] = unit_trade_size
         ν_new_bid = [unit_trade_size]
         ν_new_ask = [unit_trade_size]
         ν_new = 0
@@ -458,8 +549,13 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         cash, z = update_init_cash_inventory(cash, z, P_t, S_ref_0, ν_new_bid,
                                         new_bid[3], ν_new_ask, new_ask[3])
 
+        # compute and store cash and inventory data
+        if collect_data == true
+            push!(cash_data, cash)
+            push!(inventory_data, z)
+        end
+
         # Update Estimators: Recursive Least Squares w/ multiple observations
-        # 𝐏_old = inv(A' * A)
         # new observation k
         ν_new = vcat(ν_ϵ, vcat(ν_new_bid, ν_new_ask))
         A_new = vcat(A, vcat(new_bid, new_ask))
@@ -479,11 +575,13 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         A = A_new
         𝐏_old = 𝐏_new
 
-        # compute and store loss (for plotting)
-        ν_loss = compute_mse(ν_ϵ, x_QR_ν, A)
-        push!(ν_ϵ_losses, ν_loss)
-        s_loss = compute_mse(s_ϵ, x_QR_s, A)
-        push!(s_ϵ_losses, s_loss)
+        # compute and store loss
+        if collect_data == true
+            ν_loss = compute_mse(ν_ϵ, x_QR_ν, A)
+            push!(ν_ϵ_losses, ν_loss)
+            s_loss = compute_mse(s_ϵ, x_QR_s, A)
+            push!(s_ϵ_losses, s_loss) 
+        end
 
         # update online variance and values for future online estimates
         # https://www.johndcook.com/blog/standard_deviation/
@@ -499,13 +597,27 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             var_s += (var_s + ((s_new[k+i] - mean_s) * (s_new[k+i] - mean_s_new))) / (k + i) # new variance
         end
         # update values
-        sum_ν = sum(ν_new[k+1:end]) # rolling sum count
-        sum_s = sum(s_new[k+1:end]) # rolling sum count
+        sum_ν += sum(ν_new[k+1:end]) # rolling sum count
+        sum_s += sum(s_new[k+1:end]) # rolling sum count
         k = length(ν_ϵ) # number of samples, same as length(s_ϵ)
         P_last = P_t # for volatility update step
-
     end
     @info "(Adaptive MM) Trade sequence complete."
-    # Plots
-    # plot losses
+
+    # Data collection
+    if collect_data == true
+        # for ML loss - prepare tabular dataset
+        loss_data = DataFrame(ν_ϵ_loss = ν_ϵ_losses, s_ϵ_loss = s_ϵ_losses)
+        # for ML loss - create save path
+        loss_savepath = mkpath("../../Data/ABMs/Exchange/ML_loss")
+        # for ML loss - save data
+        CSV.write("$(loss_savepath)/RLS_losses.csv", loss_data)
+
+        # for cash and inventory - prepare tabular dataset
+        cash_inv_data = DataFrame(cash_dt = cash_data, inv_dt = inventory_data)
+        # for cash and inventory - create save path
+        cash_inv_savepath = mkpath("../../Data/ABMs/Exchange/cash_inv")
+        # for cash and inventory - save data
+        CSV.write("$(cash_inv_savepath)/cash_inv_data.csv", cash_inv_data)
+    end
 end
