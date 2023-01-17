@@ -18,6 +18,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 VL_LimitOrderBook = "aaf583bd-e1f6-46ea-b02f-a6ceb51252d5"
 
 [compat]
+CSV = "0.10"
 Distributions = "0.25"
 julia = "1"
 
