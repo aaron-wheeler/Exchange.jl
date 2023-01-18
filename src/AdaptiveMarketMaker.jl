@@ -438,6 +438,8 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             # no inventory -> no skew
             ϵ_buy = ϵ_buy
             ϵ_sell = ϵ_sell
+            new_bid[3] = ϵ_buy
+            new_ask[3] = ϵ_sell
             println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
             P_bid = P_t - round(S_ref_0*(1 + ϵ_buy), digits=2); P_ask = P_t + round(S_ref_0*(1 + ϵ_sell), digits=2)
             P_bid = round(P_bid, digits=2)
