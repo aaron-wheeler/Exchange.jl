@@ -102,11 +102,6 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
-    # initiation and activation rule
-    time = 0.0:0.001:10.0 # sufficiently granular for Pareto distribution
-    prob_activation = (pdf.(Pareto(1,1), time))[1005:10001]
-    initiated = false
-
     # connect to brokerage
     url = "http://$(host_ip_address):$(port)"
     Client.SERVER[] = url
@@ -128,6 +123,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
     new_ask = [0.0 0.0 0.0]
 
     # instantiate dynamic variables
+    initiated = false
     σ = 0
     P_last = 0
     x_QR_ν = zeros(3) # least squares estimator, dim: (3,)
@@ -605,6 +601,46 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         P_last = P_t # for volatility update step
     end
     @info "(Adaptive MM) Trade sequence complete."
+
+    # clear inventory
+    order_size = z
+    if !iszero(order_size) && z > 0
+        # positive inventory -> hedge via sell order
+        println("Hedge sell order -> sell $(order_size) shares")
+        # SUBMIT SELL MARKET ORDER
+        order_id = Exchange.ORDER_ID_COUNTER[] += 1
+        order_id *= -1
+        order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
+        # UPDATE z
+        println("Inventory z = $(z) -> z = $(z - order_size)")
+        z -= order_size
+        # UPDATE cash (not accurate, temporary fix)
+        bid_price, _ = Client.getBidAsk(ticker)
+        cash += order_size*bid_price
+        cash = round(cash, digits=2)
+        println("profit = ", cash)
+    elseif !iszero(order_size) && z < 0
+        # negative inventory -> hedge via buy order
+        order_size = -order_size
+        println("Hedge buy order -> buy $(order_size) shares")
+        # SUBMIT BUY MARKET ORDER
+        order_id = Exchange.ORDER_ID_COUNTER[] += 1
+        order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
+        # UPDATE z
+        println("Inventory z = $(z) -> z = $(z + order_size)")
+        z += order_size
+        # UPDATE cash (not accurate, temporary fix)
+        _, ask_price = Client.getBidAsk(ticker)
+        cash -= order_size*ask_price
+        cash = round(cash, digits=2)
+        println("profit = ", cash)
+    end
+
+    # compute and store cash and inventory data
+    if collect_data == true
+        push!(cash_data, cash)
+        push!(inventory_data, z)
+    end
 
     # Data collection
     if collect_data == true
