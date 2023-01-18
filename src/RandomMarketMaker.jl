@@ -60,13 +60,13 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
 
     # hold off trading until the market opens
     if Dates.now() < market_open
-        @info "(Adaptive MM) Waiting until market open..."
+        @info "(Random MM) Waiting until market open..."
         pre_market_time = Dates.value(market_open - now()) / 1000 # convert to secs
         sleep(pre_market_time)
     end
 
     # execute trades until the market closes
-    @info "(Adaptive MM) Initiating trade sequence now."
+    @info "(Random MM) Initiating trade sequence now."
     while Dates.now() < market_close
         # check stopping condition
         if Dates.now() > market_close
@@ -193,7 +193,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
             push!(inventory_data, z)
         end
     end
-    @info "(Adaptive MM) Trade sequence complete."
+    @info "(Random MM) Trade sequence complete."
 
     # clear inventory
     order_size = z
@@ -211,6 +211,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         bid_price, _ = Client.getBidAsk(ticker)
         cash += order_size*bid_price
         cash = round(cash, digits=2)
+        println("profit = ", cash)
     elseif !iszero(order_size) && z < 0
         # negative inventory -> hedge via buy order
         order_size = -order_size
@@ -225,6 +226,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         _, ask_price = Client.getBidAsk(ticker)
         cash -= order_size*ask_price
         cash = round(cash, digits=2)
+        println("profit = ", cash)
     end
 
     # compute and store cash and inventory data
