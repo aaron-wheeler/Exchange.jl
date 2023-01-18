@@ -10,7 +10,8 @@ parameters = (
     price_θ = 1.0, # scale param for price distribution (Gumbel)
     tick_size = 0.01, # minimum price tick for underlying asset
     volume_α = 2.0, # shape param for volume distribution (Beta)
-    volume_β = 5.0 # shape param for volume distribution (Beta)
+    volume_β = 5.0, # shape param for volume distribution (Beta)
+    default_min_order_size = 100 # default order size for contra order
 )
 
 server_info = (

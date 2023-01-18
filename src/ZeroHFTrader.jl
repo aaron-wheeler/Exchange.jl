@@ -68,10 +68,10 @@ function search_ask_quotes(ask_price, active_sell_orders)
     return best_ask_price, worst_ask_price, best_quote_id, worst_quote_id
 end
 
-function post_contra_ask_quote!(ticker, id, tick_size)
+function post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
     bid_price, ask_price, spread = get_LOB_details(ticker)
     active_sell_orders = Client.getActiveSellOrders(id, ticker)
-    limit_size = 100 # default min HFT volume
+    limit_size = default_min_order_size # default min HFT volume
     if !isempty(active_sell_orders)
         best_ask_price, worst_ask_price, best_quote_id, worst_quote_id = search_ask_quotes(ask_price, active_sell_orders)
         if spread ≤ 0.05
@@ -132,10 +132,10 @@ function post_contra_ask_quote!(ticker, id, tick_size)
     end
 end
 
-function post_contra_bid_quote!(ticker, id, tick_size)
+function post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)
     bid_price, ask_price, spread = get_LOB_details(ticker)
     active_buy_orders = Client.getActiveBuyOrders(id, ticker)
-    limit_size = 100 # default min HFT volume
+    limit_size = default_min_order_size # default min HFT volume
     if !isempty(active_buy_orders)
         best_bid_price, worst_bid_price, best_quote_id, worst_quote_id = search_bid_quotes(bid_price, active_buy_orders)
         if spread ≤ 0.05
@@ -196,7 +196,7 @@ end
 
 function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, server_info)
     # unpack parameters
-    prob_wait,trade_freq,prob_activation,init_hist_volatility,price_μ,price_θ,tick_size,volume_α,volume_β = parameters
+    prob_wait,trade_freq,prob_activation,init_hist_volatility,price_μ,price_θ,tick_size,volume_α,volume_β,default_min_order_size = parameters
     host_ip_address, port, username, password = server_info
 
     # connect to brokerage
@@ -211,6 +211,9 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
     risk_aversion = [rand(Uniform()) for i in 1:num_HFT] # inventory risk tolerance
     ticker_list = collect(Int, 1:num_tickers)
 
+    # instantiate dynamic variables
+    # HFT_inventory = zeros(Int, num_HFT) # this information is not instant
+
     # hold off trading until the market opens
     if Dates.now() < market_open
         @info "(HFTrader) Waiting until market open..."
@@ -221,7 +224,7 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
     # execute trades until the market closes
     @info "(HFTrader) Initiating trade sequence now."
     while Dates.now() < market_close
-        # determine order of HFTrader trading sequence
+        # determine the order that the HFTrader agents will trade in
         shuffle!(HFT_id)
         for i in eachindex(HFT_id)
             # wait 'trade_freq' seconds
@@ -230,20 +233,23 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
             end
             id = HFT_id[i]
             index = HFT_id[i] - num_tickers
-            # determine order of tickers to trade
+
+            # determine the order that the tickers will be traded in
             shuffle!(ticker_list)
             for j in eachindex(ticker_list)
                 ticker = ticker_list[j]
+
                 # check for sufficient trading conditions
                 bid_price, ask_price, spread = get_LOB_details(ticker)
                 if rand() < prob_activation && spread > 0.02
                     # determine main order side
                     main_order_side = rand() < 0.5 ? 1 : -1
+
                     if main_order_side > 0
-                        # MAIN BUY ORDER
+                        # MAIN ORDER = BUY ORDER
                         # determine if orders are to be stacked based on trader risk tolerance
                         if rand() ≤ risk_aversion[index]
-                            # do not stack orders, replace with existing order
+                            # do not stack orders, replace an existing order
                             active_buy_orders = Client.getActiveBuyOrders(id, ticker)
                             # place main buy order
                             limit_price, limit_size = produce_bid_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
@@ -265,19 +271,20 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
                                 end
                             end
                         else
-                            # stack orders, add main buy order
+                            # stack orders, add main buy order to existing orders
                             limit_price, limit_size = produce_bid_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
                             order_id = Exchange.ORDER_ID_COUNTER[] += 1
                             # println("BUY: price = $(limit_price), size = $(limit_size).")
                             buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
                         end
-                        # CONTRA SELL ORDER
-                        post_contra_ask_quote!(ticker, id, tick_size)
-                    else
-                        # MAIN SELL ORDER
+                        # CONTRA ORDER = SELL ORDER
+                        post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
+
+                    else # main_order_side =< 0
+                        # MAIN ORDER = SELL ORDER
                         # determine if orders are to be stacked based on trader risk tolerance
                         if rand() ≤ risk_aversion[index]
-                            # do not stack orders, replace with existing order
+                            # do not stack orders, replace an existing order
                             active_sell_orders = Client.getActiveSellOrders(id, ticker)
                             # place main sell order
                             limit_price, limit_size = produce_ask_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
@@ -307,9 +314,10 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
                             # println("SELL: price = $(limit_price), size = $(limit_size).")
                             sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",limit_price,limit_size,id)
                         end
-                        # CONTRA BUY ORDER
-                        post_contra_bid_quote!(ticker, id, tick_size)
+                        # CONTRA ORDER = BUY ORDER
+                        post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)
                     end
+                    
                     # check early exit condition
                     if Dates.now() > market_close
                         break
