@@ -242,6 +242,6 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         # for cash and inventory - create save path
         cash_inv_savepath = mkpath("../../Data/ABMs/Exchange/cash_inv")
         # for cash and inventory - save data
-        CSV.write("$(cash_inv_savepath)/random_cash_inv_data.csv", cash_inv_data)
+        CSV.write("$(cash_inv_savepath)/random_cash_inv_data_id$(id).csv", cash_inv_data)
     end
 end
