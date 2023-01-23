@@ -6,6 +6,7 @@ const ORDER_ID_COUNTER = Ref{Int64}(0)
 
 include("SimpleMarketMaker.jl")
 include("ZeroHFTrader.jl")
+include("utils.jl")
 include("AdaptiveMarketMaker.jl")
 include("RandomMarketMaker.jl")
 
