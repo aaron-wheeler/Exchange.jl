@@ -13,7 +13,7 @@ parameters = (
 init_conditions = (
     cash = 0, # initial cash balance
     z = 0, # initial inventory
-    num_init_quotes = 5, # number of random quotes to send out per initialization round
+    num_init_quotes = 10, # number of random quotes to send out per initialization round
     num_init_rounds = 5 # number of initialization rounds
 )
 
@@ -26,7 +26,7 @@ server_info = (
 
 ticker = 1
 market_open = Dates.now() + Dates.Second(30) # DateTime(2022,7,19,13,19,41,036)
-market_close = market_open + Dates.Minute(12)
+market_close = market_open + Dates.Minute(10)
 
 AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info, collect_data = true)
 
