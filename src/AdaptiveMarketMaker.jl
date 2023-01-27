@@ -58,7 +58,7 @@ function construct_ERTable(P_last, S_ref_last, num_quotes, bid_ϵ_vals_t,
     # compute incoming net flow
     ν_ϵ = vcat(bid_ν_ϵ_t, ask_ν_ϵ_t)
     # compute normalized spread PnL -> ν_ϵ*S_ref*(1 + ϵ)) / S_ref
-    s_ϵ = [((ν_ϵ[i]*A[:, 2][i]*(1 + A[:, 3][i])) / (A[:, 2][i])) for i in 1:size(A, 1)]
+    s_ϵ = [((ν_ϵ[i]*round(A[:, 2][i]*(1 + A[:, 3][i]), digits=2)) / (A[:, 2][i])) for i in 1:size(A, 1)]
     return ν_ϵ, s_ϵ, A
 end
 
@@ -103,7 +103,8 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
 
     # instantiate dynamic variables
     initiated = false
-    σ = 0
+    σ_new = 0
+    sum_returns = 0
     P_last = 0
     x_QR_ν = zeros(4) # least squares estimator, dim: (4,)
     V_market = 0
@@ -220,7 +221,6 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             x_QR_s = A \ s_ϵ # QR Decomposition
             println("x_QR_ν = ", x_QR_ν)
             println("size(x_QR_ν) = ", size(x_QR_ν))
-
             println("A = ", A)
             println("ν_ϵ = ", ν_ϵ)
             println("s_ϵ = ", s_ϵ)
@@ -256,9 +256,10 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
 
             # compute the volatility σ
             log_returns = [log(P_rounds[i+1] / P_rounds[i]) for i in 1:(num_init_rounds -1)]
+            sum_returns += sum(log_returns)
             mean_return = sum(log_returns) / length(log_returns)
             return_variance = sum((log_returns .- mean_return).^2) / (length(log_returns) - 1)
-            σ = sqrt(return_variance) # volatility
+            σ_new = sqrt(return_variance) # volatility
 
             # complete initialization step
             @info " (Adaptive MM) Initialization rounds complete. Starting RLS procedure now."
@@ -272,21 +273,31 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
 
         # retrieve current market conditions (current mid-price and side-spread)
         P_t, S_ref_0 = get_price_details(ticker)
+        S_ref_0 <= 0.02 ? continue : nothing # avoid small spread/error
         new_bid[2] = P_t
         new_ask[2] = P_t
         new_bid[3] = S_ref_0
         new_ask[3] = S_ref_0
 
-        # update volatility estimate
+        # update online volatility
         println("========================")
         println("")
-        println("σ_old = ", σ)
+        println("σ_old = ", σ_new)
+        n = k/2 # number of trading invocations
+        returns_t = log(P_t / P_last)
+        sum_returns += returns_t
+        mean_returns = sum_returns / n
+        mean_returns_new = mean_returns + ((returns_t - mean_returns) / n) # mean
+        σ_new = σ_new + ((returns_t - mean_returns) * (returns_t - mean_returns_new)) # std
+
+        # update volatility estimate
+        println("σ_new = ", σ_new)
         println("P_t = ", P_t)
         println("P_last = ", P_last)
         println("S_ref_0 = ", S_ref_0)
-        # iszero(σ) ? σ = 0.15 : nothing # set to average empirical stock volatility
-        σ = σ * sqrt(abs(P_t - P_last)) # new volatility
-        println("σ_new = ", σ)
+        σ = σ_new * sqrt(abs(P_t - P_last)) # normal volatility
+        println("σ_normal = ", σ)
+        println("V_market = ", V_market)
 
         # check variables
         println("sum_s = ", sum_s)
@@ -315,7 +326,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         problem = minimize(t)
         problem.constraints += prob <= t
         problem.constraints += -prob <= t
-        problem.constraints += -0.99 <= ϵ_ms
+        problem.constraints += -0.85 <= ϵ_ms
         problem.constraints += (((0.5*P_t) / S_ref_0) + 1) >= ϵ_ms
         # Solve the problem by calling solve!
         solve!(problem, ECOS.Optimizer; silent_solver = true)
@@ -334,7 +345,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         p.constraints += -prob <= t
         p.constraints += t - cost1 <= δ_tol
         p.constraints += -(t - cost1) <= δ_tol
-        p.constraints += -0.99 <= ϵ_opt
+        p.constraints += -0.85 <= ϵ_opt
         p.constraints += (((0.5*P_t) / S_ref_0) + 1) >= ϵ_opt
         solve!(p, ECOS.Optimizer; silent_solver = true)
 
@@ -348,27 +359,28 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         cost2 = JuMP.Model(Ipopt.Optimizer)
         set_silent(cost2)
         ϵ_skew = 0 # scalar
-        @variable(cost2, -0.99 ≤ ϵ_skew ≤ ((0.5*P_t) / S_ref_0) + 1) # mid-price ≤ ϵ_skew ≤ 50% * P_(bid/ask)_0 of way into book
+        @variable(cost2, -0.85 ≤ ϵ_skew ≤ ((0.5*P_t) / S_ref_0) + 1) # mid-price ≤ ϵ_skew ≤ 50% * P_(bid/ask)_0 of way into book
         # setup problem -
         E_s_ϵ = ([1.0 P_t S_ref_0 ϵ_skew]*x_QR_s)[1] # expected value
         mean_s = sum_s / k
         mean_s_ϵ = mean_s + ((E_s_ϵ - mean_s) / k)
-        var_s_ϵ = var_s + ((E_s_ϵ - mean_s) * (E_s_ϵ - mean_s_ϵ)) # variance
+        var_s_ϵ = (var_s + ((E_s_ϵ - mean_s) * (E_s_ϵ - mean_s_ϵ))) / (k - 1) # variance
         # repeat for ν
         E_z_ν_ϵ = z + ([1.0 P_t S_ref_0 ϵ_skew]*x_QR_ν)[1] # expected value
         mean_ν = sum_ν / k
         mean_z_ν_ϵ = mean_ν + ((E_z_ν_ϵ - mean_ν) / k)
-        var_z_ν_ϵ = var_ν + ((E_z_ν_ϵ - mean_ν) * (E_z_ν_ϵ - mean_z_ν_ϵ)) # variance
+        var_z_ν_ϵ = (var_ν + ((E_z_ν_ϵ - mean_ν) * (E_z_ν_ϵ - mean_z_ν_ϵ))) / (k - 1) # variance
         # solve the problem -
         @NLobjective(cost2, Min, -(S_ref_0 * E_s_ϵ) + γ * sqrt((S_ref_0^2 * var_s_ϵ) + (σ^2 * var_z_ν_ϵ)))
         optimize!(cost2)
 
         # execute actions (submit quotes)
         trade_volume_last = Client.getTradeVolume(ticker)
+        ϵ_skew = round(value.(ϵ_skew), digits = 2)
         if z > 0
             # positive inventory -> skew sell-side order
             ϵ_buy = ϵ_buy
-            ϵ_sell = round(value.(ϵ_skew), digits = 2)
+            ϵ_skew <= ϵ_sell ? ϵ_sell = ϵ_skew : ϵ_sell = ϵ_sell
             new_bid[4] = ϵ_buy
             new_ask[4] = ϵ_sell
             println("ϵ_buy = $(ϵ_buy), ϵ_sell = $(ϵ_sell)")
@@ -391,7 +403,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             ϵ_hedge = ϵ_sell
         elseif z < 0
             # negative inventory -> skew buy-side order
-            ϵ_buy = round(value.(ϵ_skew), digits = 2)
+            ϵ_skew <= ϵ_buy ? ϵ_buy = ϵ_skew : ϵ_buy = ϵ_buy
             ϵ_sell = ϵ_sell
             new_bid[4] = ϵ_buy
             new_ask[4] = ϵ_sell
@@ -452,7 +464,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         E_zx_ν_ϵ = Z + ([1.0 P_t S_ref_0 ϵ_hedge]*x_QR_ν)[1] # expected value
         mean_ν = sum_ν / k
         mean_zx_ν_ϵ = mean_ν + ((E_zx_ν_ϵ - mean_ν) / k)
-        var_zx_ν_ϵ = var_ν + ((E_zx_ν_ϵ - mean_ν) * (E_zx_ν_ϵ - mean_zx_ν_ϵ)) # variance
+        var_zx_ν_ϵ = (var_ν + ((E_zx_ν_ϵ - mean_ν) * (E_zx_ν_ϵ - mean_zx_ν_ϵ))) / (k - 1) # variance
         # solve the problem -
         @NLobjective(cost_hedge, Min, (abs(x_frac*z) * S_ref_0) + γ * sqrt(σ^2 * var_zx_ν_ϵ))
         optimize!(cost_hedge)
@@ -490,9 +502,19 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             cash = round(cash, digits=2)
         end
 
-        # wait 'trade_freq' seconds and reset data structures
+        # wait 'trade_freq' seconds (at least), and longer if no trades occur
         sleep(trade_freq)
+        while Client.getTradeVolume(ticker) == trade_volume_last
+            sleep(trade_freq)
+            if Dates.now() > market_close
+                @info "(Adaptive MM) Market closed. Exiting early."
+                early_stoppage = true
+                break
+            end
+        end
         trade_volume_t = Client.getTradeVolume(ticker)
+
+        # reset data structures
         # ν_new_bid[1] = unit_trade_size
         # ν_new_ask[1] = unit_trade_size
         ν_new_bid = [unit_trade_size]
@@ -568,14 +590,15 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         for i in eachindex(ν_new[k+1:end])
             mean_ν = sum_ν / (k + i - 1) # using prev sum & k
             mean_ν_new = mean_ν + ((ν_new[k+i] - mean_ν) / (k + i))
-            var_ν += (var_ν + ((ν_new[k+i] - mean_ν) * (ν_new[k+i] - mean_ν_new))) / (k + i) # new variance
+            var_ν = (var_ν + ((ν_new[k+i] - mean_ν) * (ν_new[k+i] - mean_ν_new))) / (k + i) # new variance
         end
         # repeat for s
         for i in eachindex(s_new[k+1:end])
             mean_s = sum_s / (k + i - 1) # using prev sum & k
             mean_s_new = mean_s + ((s_new[k+i] - mean_s) / (k + i))
-            var_s += (var_s + ((s_new[k+i] - mean_s) * (s_new[k+i] - mean_s_new))) / (k + i) # new variance
+            var_s = (var_s + ((s_new[k+i] - mean_s) * (s_new[k+i] - mean_s_new))) / (k + i) # new variance
         end
+
         # update values
         sum_ν += sum(ν_new[k+1:end]) # rolling sum count
         sum_s += sum(s_new[k+1:end]) # rolling sum count
@@ -615,6 +638,8 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         _, ask_price = Client.getBidAsk(ticker)
         cash -= order_size*ask_price
         cash = round(cash, digits=2)
+        println("profit = ", cash)
+    else
         println("profit = ", cash)
     end
 
