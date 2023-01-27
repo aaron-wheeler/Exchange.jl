@@ -8,7 +8,7 @@ using CSV, DataFrames
 function RandomMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info; collect_data = false)
     # unpack parameters
     id,ϵ_min,ϵ_max,inventory_limit,unit_trade_size,trade_freq = parameters
-    cash, z = init_conditions
+    cash, z = init_conditions # dynamic variables
     host_ip_address, port, username, password = server_info
 
     # connect to brokerage
@@ -28,9 +28,6 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
     # time_trade_data = DateTime[]
     new_bid = [0.0 0.0 0.0]
     new_ask = [0.0 0.0 0.0]
-
-    # instantiate dynamic variables
-    P_last = 0
 
     # hold off trading until the market opens
     if Dates.now() < market_open
@@ -58,9 +55,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         println("========================")
         println("")
         println("P_t = ", P_t)
-        println("P_last = ", P_last)
         println("S_ref_0 = ", S_ref_0)
-
         println("z = ", z)
         println("cash = ", cash)
 
@@ -200,6 +195,8 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         _, ask_price = Client.getBidAsk(ticker)
         cash -= order_size*ask_price
         cash = round(cash, digits=2)
+        println("profit = ", cash)
+    else
         println("profit = ", cash)
     end
 
