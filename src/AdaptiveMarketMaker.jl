@@ -24,16 +24,13 @@ function post_rand_quotes(ticker, num_quotes, unit_trade_size, id,
     # post quotes
     for i in 1:num_quotes
         # post ask quote
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order_id *= -1
-        order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask[i],unit_trade_size,id)
+        order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask[i],unit_trade_size,id)
         println("SELL: price = $(P_ask[i]), size = $(unit_trade_size).")
         # fill quote vector
         ask_order_ids_t[i] = order_id
 
         # post bid quote
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid[i],unit_trade_size,id)
+        order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid[i],unit_trade_size,id)
         println("BUY: price = $(P_bid[i]), size = $(unit_trade_size).")
         # fill quote vector
         bid_order_ids_t[i] = order_id
@@ -391,14 +388,11 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             P_bid == P_ask ? continue : nothing # avoid error
             # SUBMIT QUOTES
             # post ask quote
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
             println("SELL: price = $(P_ask), size = $(unit_trade_size).")
-            order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
+            order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask,unit_trade_size,id)
             # post bid quote
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
             println("BUY: price = $(P_bid), size = $(unit_trade_size).")
-            order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
+            order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid,unit_trade_size,id)
             # set ϵ param for hedge step
             ϵ_hedge = ϵ_sell
         elseif z < 0
@@ -414,14 +408,11 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             P_bid == P_ask ? continue : nothing # avoid error
             # SUBMIT QUOTES
             # post ask quote
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
             println("SELL: price = $(P_ask), size = $(unit_trade_size).")
-            order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
+            order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask,unit_trade_size,id)
             # post bid quote
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
             println("BUY: price = $(P_bid), size = $(unit_trade_size).")
-            order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
+            order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid,unit_trade_size,id)
             # set ϵ param for hedge step
             ϵ_hedge = ϵ_buy
         else
@@ -437,14 +428,11 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             P_bid == P_ask ? continue : nothing # avoid error
             # SUBMIT QUOTES
             # post ask quote
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
             println("SELL: price = $(P_ask), size = $(unit_trade_size).")
-            order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
+            order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask,unit_trade_size,id)
             # post bid quote
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
             println("BUY: price = $(P_bid), size = $(unit_trade_size).")
-            order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
+            order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid,unit_trade_size,id)
             # set ϵ param for hedge step
             ϵ_hedge = ϵ_buy
         end
@@ -476,9 +464,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             # positive inventory -> hedge via sell order
             println("Hedge sell order -> sell $(order_size) shares")
             # SUBMIT SELL MARKET ORDER
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
-            order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
+            order = Client.hedgeTrade(ticker,"SELL_ORDER",order_size,id)
             # UPDATE z
             println("Inventory z = $(z) -> z = $(z - order_size)")
             z -= order_size
@@ -491,8 +477,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             order_size = -order_size
             println("Hedge buy order -> buy $(order_size) shares")
             # SUBMIT BUY MARKET ORDER
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
+            order = Client.hedgeTrade(ticker,"BUY_ORDER",order_size,id)
             # UPDATE z
             println("Inventory z = $(z) -> z = $(z + order_size)")
             z += order_size
@@ -613,9 +598,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         # positive inventory -> hedge via sell order
         println("Hedge sell order -> sell $(order_size) shares")
         # SUBMIT SELL MARKET ORDER
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order_id *= -1
-        order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
+        order = Client.hedgeTrade(ticker,"SELL_ORDER",order_size,id)
         # UPDATE z
         println("Inventory z = $(z) -> z = $(z - order_size)")
         z -= order_size
@@ -629,8 +612,7 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         order_size = -order_size
         println("Hedge buy order -> buy $(order_size) shares")
         # SUBMIT BUY MARKET ORDER
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
+        order = Client.hedgeTrade(ticker,"BUY_ORDER",order_size,id)
         # UPDATE z
         println("Inventory z = $(z) -> z = $(z + order_size)")
         z += order_size

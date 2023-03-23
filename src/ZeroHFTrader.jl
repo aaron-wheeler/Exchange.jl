@@ -80,10 +80,8 @@ function post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
                 return
             else
                 # place contra order
-                order_id = Exchange.ORDER_ID_COUNTER[] += 1
-                order_id *= -1
                 # println("SELL: price = $(ask_price), size = $(limit_size).")
-                sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",ask_price,limit_size,id)
+                sell_order = Client.provideLiquidity(ticker,"SELL_ORDER",ask_price,limit_size,id)
                 # cancel next closest ask
                 cancel_order = Client.cancelQuote(ticker,best_quote_id,"SELL_ORDER",best_ask_price, id)
             end
@@ -98,10 +96,8 @@ function post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
             half_mid_ask = (mid_price + ask_price) / 2.0
             new_ask_price = contra_ask_sample > half_mid_ask ? contra_ask_sample : max_price_dev(half_mid_ask, tick_size, 1)
             # place contra order
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
             # println("SELL: price = $(new_ask_price), size = $(limit_size).")
-            sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",new_ask_price,limit_size,id)
+            sell_order = Client.provideLiquidity(ticker,"SELL_ORDER",new_ask_price,limit_size,id)
             # cancel next closest ask
             cancel_order = Client.cancelQuote(ticker,best_quote_id,"SELL_ORDER",best_ask_price, id)
         end
@@ -109,10 +105,8 @@ function post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
         # no existing sell orders in book
         if spread ≤ 0.05
             # place passive contra order
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
             # println("SELL: price = $(ask_price), size = $(limit_size).")
-            sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",ask_price,limit_size,id)
+            sell_order = Client.provideLiquidity(ticker,"SELL_ORDER",ask_price,limit_size,id)
         else
             # place aggressive contra order
             μ = tick_size # distribution mean
@@ -124,10 +118,8 @@ function post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
             half_mid_ask = (mid_price + ask_price) / 2.0
             new_ask_price = contra_ask_sample > half_mid_ask ? contra_ask_sample : max_price_dev(half_mid_ask, tick_size, 1)
             # place contra order
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
             # println("SELL: price = $(new_ask_price), size = $(limit_size).")
-            sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",new_ask_price,limit_size,id)
+            sell_order = Client.provideLiquidity(ticker,"SELL_ORDER",new_ask_price,limit_size,id)
         end
     end
 end
@@ -144,9 +136,8 @@ function post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)
                 return
             else
                 # place contra order
-                order_id = Exchange.ORDER_ID_COUNTER[] += 1
                 # println("BUY: price = $(bid_price), size = $(limit_size).")
-                buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",bid_price,limit_size,id)
+                buy_order = Client.provideLiquidity(ticker,"BUY_ORDER",bid_price,limit_size,id)
                 # cancel next closest bid
                 cancel_order = Client.cancelQuote(ticker,best_quote_id,"BUY_ORDER",best_bid_price, id)
             end
@@ -161,9 +152,8 @@ function post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)
             half_mid_bid = (mid_price + bid_price) / 2.0
             new_bid_price = contra_bid_sample < half_mid_bid ? contra_bid_sample : max_price_dev(half_mid_bid, tick_size, -1)
             # place contra order
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
             # println("BUY: price = $(new_bid_price), size = $(limit_size).")
-            buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",new_bid_price,limit_size,id)
+            buy_order = Client.provideLiquidity(ticker,"BUY_ORDER",new_bid_price,limit_size,id)
             # cancel next closest bid
             cancel_order = Client.cancelQuote(ticker,best_quote_id,"BUY_ORDER",best_bid_price, id)
         end
@@ -171,9 +161,8 @@ function post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)
         # no existing buy orders in book
         if spread ≤ 0.05
             # place passive contra order
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
             # println("BUY: price = $(bid_price), size = $(limit_size).")
-            buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",bid_price,limit_size,id)
+            buy_order = Client.provideLiquidity(ticker,"BUY_ORDER",bid_price,limit_size,id)
         else
             # place aggressive contra order
             μ = tick_size # distribution mean
@@ -185,9 +174,8 @@ function post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)
             half_mid_bid = (mid_price + bid_price) / 2.0
             new_bid_price = contra_bid_sample < half_mid_bid ? contra_bid_sample : max_price_dev(half_mid_bid, tick_size, -1)
             # place contra order
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
             # println("BUY: price = $(new_bid_price), size = $(limit_size).")
-            buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",new_bid_price,limit_size,id)
+            buy_order = Client.provideLiquidity(ticker,"BUY_ORDER",new_bid_price,limit_size,id)
         end
     end
 end
@@ -253,9 +241,8 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
                             active_buy_orders = Client.getActiveBuyOrders(id, ticker)
                             # place main buy order
                             limit_price, limit_size = produce_bid_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
-                            order_id = Exchange.ORDER_ID_COUNTER[] += 1
                             # println("BUY: price = $(limit_price), size = $(limit_size).")
-                            buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
+                            buy_order = Client.provideLiquidity(ticker,"BUY_ORDER",limit_price,limit_size,id)
                             if !isempty(active_buy_orders)
                                 # cancel order to hedge inventory risk
                                 best_bid_price, worst_bid_price, best_quote_id, worst_quote_id = search_bid_quotes(bid_price, active_buy_orders)
@@ -273,9 +260,8 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
                         else
                             # stack orders, add main buy order to existing orders
                             limit_price, limit_size = produce_bid_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
-                            order_id = Exchange.ORDER_ID_COUNTER[] += 1
                             # println("BUY: price = $(limit_price), size = $(limit_size).")
-                            buy_order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
+                            buy_order = Client.provideLiquidity(ticker,"BUY_ORDER",limit_price,limit_size,id)
                         end
                         # CONTRA ORDER = SELL ORDER
                         post_contra_ask_quote!(ticker, id, default_min_order_size, tick_size)
@@ -288,10 +274,8 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
                             active_sell_orders = Client.getActiveSellOrders(id, ticker)
                             # place main sell order
                             limit_price, limit_size = produce_ask_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
-                            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-                            order_id *= -1
                             # println("SELL: price = $(limit_price), size = $(limit_size).")
-                            sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",limit_price,limit_size,id)
+                            sell_order = Client.provideLiquidity(ticker,"SELL_ORDER",limit_price,limit_size,id)
                             if !isempty(active_sell_orders)
                                 # cancel order to hedge inventory risk
                                 best_ask_price, worst_ask_price, best_quote_id, worst_quote_id = search_ask_quotes(ask_price, active_sell_orders)
@@ -309,10 +293,8 @@ function HFT_run!(num_tickers, num_HFT, market_open, market_close, parameters, s
                         else
                             # stack orders, add main sell order
                             limit_price, limit_size = produce_ask_quote(bid_price, ask_price, spread, init_hist_volatility, price_μ, price_θ, tick_size, volume_α, volume_β)
-                            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-                            order_id *= -1
                             # println("SELL: price = $(limit_price), size = $(limit_size).")
-                            sell_order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",limit_price,limit_size,id)
+                            sell_order = Client.provideLiquidity(ticker,"SELL_ORDER",limit_price,limit_size,id)
                         end
                         # CONTRA ORDER = BUY ORDER
                         post_contra_bid_quote!(ticker, id, default_min_order_size, tick_size)

@@ -76,14 +76,11 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         P_bid == P_ask ? continue : nothing # avoid error
         # SUBMIT QUOTES
         # post ask quote
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order_id *= -1
         println("SELL: price = $(P_ask), size = $(unit_trade_size).")
-        order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",P_ask,unit_trade_size,id)
+        order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask,unit_trade_size,id)
         # post bid quote
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
         println("BUY: price = $(P_bid), size = $(unit_trade_size).")
-        order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",P_bid,unit_trade_size,id)
+        order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid,unit_trade_size,id)
 
         #----- Hedging Policy -----#
         # Determine the fraction of current inventory to hedge (by initiating offsetting trade)
@@ -97,9 +94,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
             # positive inventory -> hedge via sell order
             println("Hedge sell order -> sell $(order_size) shares")
             # SUBMIT SELL MARKET ORDER
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order_id *= -1
-            order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
+            order = Client.hedgeTrade(ticker,"SELL_ORDER",order_size,id)
             # UPDATE z
             println("Inventory z = $(z) -> z = $(z - order_size)")
             z -= order_size
@@ -112,8 +107,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
             order_size = -order_size
             println("Hedge buy order -> buy $(order_size) shares")
             # SUBMIT BUY MARKET ORDER
-            order_id = Exchange.ORDER_ID_COUNTER[] += 1
-            order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
+            order = Client.hedgeTrade(ticker,"BUY_ORDER",order_size,id)
             # UPDATE z
             println("Inventory z = $(z) -> z = $(z + order_size)")
             z += order_size
@@ -170,9 +164,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         # positive inventory -> hedge via sell order
         println("Hedge sell order -> sell $(order_size) shares")
         # SUBMIT SELL MARKET ORDER
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order_id *= -1
-        order = Client.hedgeTrade(ticker,order_id,"SELL_ORDER",order_size,id)
+        order = Client.hedgeTrade(ticker,"SELL_ORDER",order_size,id)
         # UPDATE z
         println("Inventory z = $(z) -> z = $(z - order_size)")
         z -= order_size
@@ -186,8 +178,7 @@ function RandomMM_run!(ticker, market_open, market_close, parameters, init_condi
         order_size = -order_size
         println("Hedge buy order -> buy $(order_size) shares")
         # SUBMIT BUY MARKET ORDER
-        order_id = Exchange.ORDER_ID_COUNTER[] += 1
-        order = Client.hedgeTrade(ticker,order_id,"BUY_ORDER",order_size,id)
+        order = Client.hedgeTrade(ticker,"BUY_ORDER",order_size,id)
         # UPDATE z
         println("Inventory z = $(z) -> z = $(z + order_size)")
         z += order_size

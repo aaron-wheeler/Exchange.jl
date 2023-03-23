@@ -24,9 +24,8 @@ function post_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volum
     equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
-    order_id = Exchange.ORDER_ID_COUNTER[] += 1
     # println("BUY: price = $(limit_price), size = $(limit_size).")
-    order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
+    order = Client.provideLiquidity(ticker,"BUY_ORDER",limit_price,limit_size,id)
 end
 
 function post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
@@ -41,10 +40,8 @@ function post_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volum
     equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
-    order_id = Exchange.ORDER_ID_COUNTER[] += 1
-    order_id *= -1
     # println("SELL: price = $(limit_price), size = $(limit_size).")
-    order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",limit_price,limit_size,id)
+    order = Client.provideLiquidity(ticker,"SELL_ORDER",limit_price,limit_size,id)
 end
 
 function post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
@@ -59,9 +56,8 @@ function post_contra_bid_quote!(ticker, OB_imbalance, tick_size, volume_location
     equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
-    order_id = Exchange.ORDER_ID_COUNTER[] += 1
     # println("CONTRA_BUY: price = $(limit_price), size = $(limit_size).")
-    order = Client.provideLiquidity(ticker,order_id,"BUY_ORDER",limit_price,limit_size,id)
+    order = Client.provideLiquidity(ticker,"BUY_ORDER",limit_price,limit_size,id)
 end
 
 function post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location, volume_scale, volume_shape, equil_scale, id)
@@ -76,10 +72,8 @@ function post_contra_ask_quote!(ticker, OB_imbalance, tick_size, volume_location
     equil = ((max(0, 1 - vol_disparity)) * (volume_location))^equil_scale # order book stability term
     limit_size = round(Int, abs(rand(SkewNormal(volume_location, volume_scale+equil, volume_shape+equil))))
     # place order
-    order_id = Exchange.ORDER_ID_COUNTER[] += 1
-    order_id *= -1
     # println("CONTRA_SELL: price = $(limit_price), size = $(limit_size).")
-    order = Client.provideLiquidity(ticker,order_id,"SELL_ORDER",limit_price,limit_size,id)
+    order = Client.provideLiquidity(ticker,"SELL_ORDER",limit_price,limit_size,id)
 end
 
 # ======================================================================================== #
