@@ -24,16 +24,16 @@ function post_rand_quotes(ticker, num_quotes, unit_trade_size, id,
     # post quotes
     for i in 1:num_quotes
         # post ask quote
-        order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask[i],unit_trade_size,id)
+        ask_order = Client.provideLiquidity(ticker,"SELL_ORDER",P_ask[i],unit_trade_size,id,send_id=true)
         println("SELL: price = $(P_ask[i]), size = $(unit_trade_size).")
-        # fill quote vector
-        ask_order_ids_t[i] = order_id
+        # fill quote vector with order_id
+        ask_order_ids_t[i] = ask_order
 
         # post bid quote
-        order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid[i],unit_trade_size,id)
+        bid_order = Client.provideLiquidity(ticker,"BUY_ORDER",P_bid[i],unit_trade_size,id,send_id=true)
         println("BUY: price = $(P_bid[i]), size = $(unit_trade_size).")
-        # fill quote vector
-        bid_order_ids_t[i] = order_id
+        # fill quote vector with order_id
+        bid_order_ids_t[i] = bid_order
     end
     # fill quote vectors
     ask_ϵ_vals_t = rand_ϵ
