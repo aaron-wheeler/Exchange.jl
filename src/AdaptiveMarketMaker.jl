@@ -666,13 +666,20 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         # for ML loss - create save path
         loss_savepath = mkpath("../../Data/ABMs/Exchange/ML_loss")
         # for ML loss - save data
-        CSV.write("$(loss_savepath)/RLS_losses.csv", loss_data)
+        CSV.write("$(loss_savepath)/RLS_losses_AMM_id$(id).csv", loss_data)
 
         # for cash and inventory - prepare tabular dataset
         cash_inv_data = DataFrame(cash_dt = cash_data, inv_dt = inventory_data)
         # for cash and inventory - create save path
         cash_inv_savepath = mkpath("../../Data/ABMs/Exchange/cash_inv")
         # for cash and inventory - save data
-        CSV.write("$(cash_inv_savepath)/cash_inv_data.csv", cash_inv_data)
+        CSV.write("$(cash_inv_savepath)/cash_inv_data_AMM_id$(id).csv", cash_inv_data)
+
+        # for model data - prepare tabular dataset
+        model_data = DataFrame(mid_price_dt = A[:, 2], mid_spread_dt = A[:, 3], ϵ_dt = A[:, 4], ν_ϵ_dt = ν_ϵ, s_ϵ_dt = s_ϵ)
+        # for model data - create save path
+        model_data_savepath = mkpath("../../Data/ABMs/Exchange/model_data")
+        # for model data - save data
+        CSV.write("$(model_data_savepath)/model_data_AMM_id$(id).csv", model_data)
     end
 end
