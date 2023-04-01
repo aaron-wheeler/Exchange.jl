@@ -681,5 +681,35 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
         model_data_savepath = mkpath("../../Data/ABMs/Exchange/model_data")
         # for model data - save data
         CSV.write("$(model_data_savepath)/model_data_AMM_id$(id).csv", model_data)
+
+        # for model parameters - save data
+        open("$(model_data_savepath)/model_params_AMM_id$(id).txt", "w") do file
+            write(file, " Agent Parameters \n")
+            write(file, "----------------- \n")
+            write(file, "η_ms = $η_ms \n")
+            write(file, "γ = $γ \n")
+            write(file, "δ_tol = $δ_tol \n")
+            write(file, "inventory_limit = $inventory_limit \n")
+            write(file, "unit_trade_size = $unit_trade_size \n")
+            write(file, "trade_freq = $trade_freq \n")
+            write(file, "\n Initial Conditions \n")
+            write(file, "----------------- \n")
+            write(file, "cash = $cash \n")
+            write(file, "inventory = $z \n")
+            write(file, "num_init_quotes = $num_init_quotes \n")
+            write(file, "num_init_rounds = $num_init_rounds \n")
+            write(file, "\n Estimators \n")
+            write(file, "----------------- \n")
+            write(file, "x_QR_ν = [")
+            for i in eachindex(x_QR_ν)
+                write(file, "$(x_QR_ν[i]), ")
+            end
+            write(file, "] \n")
+            write(file, "x_QR_s = [")
+            for i in eachindex(x_QR_s)
+                write(file, "$(x_QR_s[i]), ")
+            end
+            write(file, "] \n")
+        end
     end
 end
