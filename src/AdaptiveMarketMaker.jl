@@ -83,7 +83,7 @@ end
 function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_conditions, server_info; collect_data = false)
     # unpack parameters
     η_ms,γ,δ_tol,inventory_limit,unit_trade_size,trade_freq = parameters
-    cash, z, num_init_quotes, num_init_rounds = init_conditions
+    init_cash, init_z, num_init_quotes, num_init_rounds = init_conditions
     host_ip_address, port, username, password = server_info
     id = ticker # LOB assigned to Market Maker
 
@@ -120,8 +120,8 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
     sum_ν = 0
     var_s = 0
     var_ν = 0
-    z = 0
-    cash = 0
+    z = init_z
+    cash = init_cash
     ν_ϵ = Float64[]
     s_ϵ = Float64[]
     A = Float64[]
@@ -694,8 +694,8 @@ function AdaptiveMM_run!(ticker, market_open, market_close, parameters, init_con
             write(file, "trade_freq = $trade_freq \n")
             write(file, "\n Initial Conditions \n")
             write(file, "----------------- \n")
-            write(file, "cash = $cash \n")
-            write(file, "inventory = $z \n")
+            write(file, "cash = $init_cash \n")
+            write(file, "inventory = $init_z \n")
             write(file, "num_init_quotes = $num_init_quotes \n")
             write(file, "num_init_rounds = $num_init_rounds \n")
             write(file, "\n Estimators \n")
